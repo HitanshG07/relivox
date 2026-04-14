@@ -231,18 +231,22 @@ class CommunicationService {
   }
 
   List<Peer> getCurrentPeers() {
+    final seenDeviceIds = <String>{};
     return _deviceEndpoints.keys.map((name) {
       final isConnected = _connectedDevices.contains(name);
       final isConnecting = _connectingDevices.contains(name);
       final eid = _exposedIdForName[name] ?? '';
+      final devId = _endpointToDeviceId[eid];
       return Peer(
         endpointId: eid,
         displayName: name,
-        deviceId: _endpointToDeviceId[eid],
-        status: isConnected ? PeerStatus.connected : (isConnecting ? PeerStatus.connecting : PeerStatus.discovered),
+        deviceId: devId,
+        status: isConnected
+            ? PeerStatus.connected
+            : (isConnecting ? PeerStatus.connecting : PeerStatus.discovered),
         lastSeen: DateTime.now().toUtc().toIso8601String(),
       );
-    }).toList();
+    }).where((p) => seenDeviceIds.add(p.deviceId ?? p.displayName)).toList();
   }
 
   void startCleanupTimer() {
@@ -365,6 +369,20 @@ class CommunicationService {
             }
             _endpointToDeviceId.remove(staleEndpoint);
             _endpointToName.remove(staleEndpoint);
+          }
+        }
+
+        // Remove stale old-name entry if this deviceId re-advertised with a new name
+        if (incomingDeviceId != null) {
+          final oldName = _endpointToName.entries
+            .where((e) => _endpointToDeviceId[e.key] == incomingDeviceId && e.value != displayName)
+            .map((e) => e.value)
+            .firstOrNull;
+          if (oldName != null) {
+            if (_connectedDevices.remove(oldName)) _connectedDevices.add(displayName);
+            if (_connectingDevices.remove(oldName)) _connectingDevices.add(displayName);
+            _deviceEndpoints.remove(oldName);
+            _exposedIdForName.remove(oldName);
           }
         }
 
