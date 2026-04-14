@@ -324,6 +324,7 @@ class CommunicationService {
       seq: 0,
       priority: type.isEmergency ? MessagePriority.high : MessagePriority.normal,
     );
+    _log.i('💡 [TX-TRACE] Sending user message ${message.id} to ${receiverId.isEmpty ? 'BROADCAST' : receiverId}');
     await _db.upsertMessage(message);
     _eventController.add(MessageReceivedEvent(message, 'local'));
     await _gossip.send(message);
@@ -333,6 +334,7 @@ class CommunicationService {
     final updatedMessage = message.copyWith(ttl: (message.ttl > 0) ? message.ttl - 1 : 0);
     _gossip.markSeen(updatedMessage.id);
     await _db.upsertMessage(updatedMessage);
+    _log.i('💡 [TX-TRACE] Invoking broadcastPayload for ${updatedMessage.id}');
     await _kChannel.invokeMethod('broadcastPayload', {'payload': updatedMessage.toWireJson()});
   }
 
