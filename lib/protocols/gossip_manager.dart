@@ -205,12 +205,18 @@ class GossipManager {
     for (final endpoint in _connectedEndpoints) {
       debugPrint('[FLUSH-TRACE] Flushing ${_pendingQueue.length} msgs for $endpoint');
       for (final pending in snapshot) {
+        if (pending.retryCount >= GossipManager.MAX_RETRIES) {
+          toRemove.add(pending);
+          debugPrint('[FLUSH-TRACE] ${pending.message.id} → ⛔ MAX_RETRIES exceeded, dropping');
+          continue;
+        }
         try {
           await _transmit(endpoint, pending.message.toWireJson());
           toRemove.add(pending);
           debugPrint('[FLUSH-TRACE] ${pending.message.id} → ✅ sent to $endpoint');
         } catch (e) {
-          debugPrint('[FLUSH-TRACE] ${pending.message.id} → ❌ skipped ($e)');
+          pending.retryCount++;
+          debugPrint('[FLUSH-TRACE] ${pending.message.id} → ❌ skipped ($e) [retry ${pending.retryCount}/${GossipManager.MAX_RETRIES}]');
         }
       }
     }
