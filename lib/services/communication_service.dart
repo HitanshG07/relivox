@@ -286,7 +286,7 @@ class CommunicationService {
     await _requestConnection(endpointId);
     _needsRetry = true;
   }
-
+ 
   Future<void> disconnectFromDevice(String name) async {
     final endpoints = _deviceEndpoints[name];
     if (endpoints == null) return;

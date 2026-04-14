@@ -72,6 +72,14 @@ class NearbyPlugin : FlutterPlugin, MethodCallHandler {
             }
 
             "startDiscovery" -> startDiscovery(result)
+            "stopAdvertising" -> {
+                Nearby.getConnectionsClient(context).stopAdvertising()
+                result.success(null)
+            }
+            "stopDiscovery" -> {
+                Nearby.getConnectionsClient(context).stopDiscovery()
+                result.success(null)
+            }
 
             "stopAll" -> {
                 safeStopAll()
