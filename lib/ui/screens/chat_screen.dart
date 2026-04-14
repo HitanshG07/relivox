@@ -6,6 +6,7 @@ import '../../models/message.dart';
 import '../../models/peer.dart';
 import '../../services/identity_service.dart';
 import '../../services/communication_service.dart';
+import '../../services/database_service.dart';
 
 class ChatScreen extends StatefulWidget {
   final Peer targetPeer;
@@ -21,27 +22,38 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0D0D1A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF13132B),
-        title: Text(widget.targetPeer.displayName, style: const TextStyle(color: Colors.white)),
-        iconTheme: const IconThemeData(color: Colors.white70),
-      ),
-      body: Column(
-        children: [
-          Expanded(child: _MessageList(scrollController: _scrollController)),
-          _InputBar(
-            controller: _controller,
-            onSend: _send,
-            targetPeer: widget.targetPeer,
+    return BlocProvider(
+      create: (context) => ChatBloc(
+        context.read<CommunicationService>(),
+        context.read<DatabaseService>(),
+        context.read<IdentityService>(),
+        peerDeviceId: widget.targetPeer.deviceId ?? widget.targetPeer.endpointId,
+      )..add(LoadAllMessages()),
+      child: Builder(builder: (context) {
+        return Scaffold(
+          backgroundColor: const Color(0xFF0D0D1A),
+          appBar: AppBar(
+            backgroundColor: const Color(0xFF13132B),
+            title: Text(widget.targetPeer.displayName,
+                style: const TextStyle(color: Colors.white)),
+            iconTheme: const IconThemeData(color: Colors.white70),
           ),
-        ],
-      ),
+          body: Column(
+            children: [
+              Expanded(child: _MessageList(scrollController: _scrollController)),
+              _InputBar(
+                controller: _controller,
+                onSend: () => _send(context),
+                targetPeer: widget.targetPeer,
+              ),
+            ],
+          ),
+        );
+      }),
     );
   }
 
-  void _send() {
+  void _send(BuildContext context) {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
     context.read<ChatBloc>().add(SendTextMessage(text));

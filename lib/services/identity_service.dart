@@ -11,6 +11,10 @@ final _log = Logger(printer: PrettyPrinter(methodCount: 0));
 /// Generates Ed25519 key pairs for message signing.
 /// All sensitive material is stored in the Android Keystore via flutter_secure_storage.
 class IdentityService {
+  static final IdentityService _instance = IdentityService._internal();
+  factory IdentityService() => _instance;
+  IdentityService._internal();
+
   static const _kDeviceId = 'relivox_device_id';
   static const _kDisplayName = 'relivox_display_name';
   static const _kSignKeyPrivate = 'relivox_sign_key_private';

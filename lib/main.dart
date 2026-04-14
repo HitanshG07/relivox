@@ -63,10 +63,6 @@ class RelivoxApp extends StatelessWidget {
             create: (_) => DiscoveryBloc(communicationService),
           ),
           BlocProvider(
-            create: (_) => ChatBloc(communicationService, databaseService, identityService)
-              ..add(LoadAllMessages()),
-          ),
-          BlocProvider(
             create: (_) => SettingsBloc(SettingsService())..add(SettingsLoaded()),
           ),
         ],

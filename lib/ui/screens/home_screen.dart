@@ -319,8 +319,12 @@ class _PeerTile extends StatelessWidget {
             color: isConnected ? Colors.greenAccent : Colors.white60,
           ),
         ),
-        title: Text(peer.displayName,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Text(
+          peer.displayName.isNotEmpty 
+            ? peer.displayName 
+            : (peer.deviceId ?? peer.endpointId),
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         subtitle: Text(
           isConnected
               ? 'Connected via mesh'

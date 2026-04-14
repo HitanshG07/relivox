@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../services/settings_service.dart';
 import '../../services/communication_service.dart';
+import '../../services/identity_service.dart';
 
 // ── EVENTS ──────────────────────────────────────────────────
 abstract class SettingsEvent {}
@@ -85,8 +86,9 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
 
     on<UsernameChanged>((event, emit) async {
       await _service.setUsername(event.value);
+      await IdentityService().setDisplayName(event.value); // Sync with IdentityService
       emit(state.copyWith(username: event.value));
-      CommunicationService().restartAdvertising(event.value); // ADD THIS
+      CommunicationService().restartAdvertising(event.value);
     });
 
     on<AllowRelayToggled>((event, emit) async {

@@ -198,35 +198,24 @@ class GossipManager {
     if (_connectedEndpoints.isEmpty) return;
     if (_pendingQueue.isEmpty) return;
 
-    debugPrint('[FLUSH-TRACE] Attempting to flush ${_pendingQueue.length} messages to ${_connectedEndpoints.length} peers');
-
     // Snapshot avoid concurrent modification
     final snapshot = List<_PendingMessage>.from(_pendingQueue);
 
-    for (final pending in snapshot) {
-      bool sent = false;
-
-      for (final endpoint in _connectedEndpoints) {
+    for (final endpoint in _connectedEndpoints) {
+      debugPrint('[FLUSH-TRACE] Flushing ${_pendingQueue.length} msgs for $endpoint');
+      
+      for (final pending in snapshot) {
+        if (!_pendingQueue.contains(pending)) continue; // Already sent to another peer in this loop
+        
         try {
           await _transmit(endpoint, pending.message.toWireJson());
           // Success
           _pendingQueue.remove(pending);
           DatabaseService().removePendingMessage(pending.message.id);
-          debugPrint('[FLUSH-TRACE] Successfully delivered ${pending.message.id} to $endpoint');
-          sent = true;
-          break; // Stop trying other endpoints for this message
+          debugPrint('[FLUSH-TRACE] ${pending.message.id} → ✅ sent to $endpoint');
         } catch (e) {
-          debugPrint('[GossipManager] Retry failed to $endpoint: $e');
-          continue; // Try next endpoint
-        }
-      }
-
-      if (!sent) {
-        pending.retryCount++;
-        if (pending.retryCount >= MAX_RETRIES) {
-          _pendingQueue.remove(pending);
-          DatabaseService().removePendingMessage(pending.message.id);
-          debugPrint('[GossipManager] Retries exhausted for ${pending.message.id}, dropped');
+          debugPrint('[FLUSH-TRACE] ${pending.message.id} → ❌ skipped ($e)');
+          continue; 
         }
       }
     }
@@ -239,6 +228,12 @@ class GossipManager {
 
   bool hasBeenAcked(String messageId) =>
       (_acks[messageId]?.isNotEmpty) ?? false;
+
+  DeviceState? _debugState;
+  void debugForceState(DeviceState state) {
+    _debugState = state;
+    debugPrint('[STATE-TRACE] Forced: $state');
+  }
 
   void reset() {
     _seenIds.clear();

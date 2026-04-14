@@ -66,12 +66,13 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
   final CommunicationService _comm;
   final DatabaseService _db;
   final IdentityService _identity;
+  final String peerDeviceId; // Persistent Peer Identity
   StreamSubscription<P2PEvent>? _sub;
 
   // Monotonically-increasing sequence number per device session
   int _seq = 0;
 
-  ChatBloc(this._comm, this._db, this._identity) : super(const ChatState()) {
+  ChatBloc(this._comm, this._db, this._identity, {required this.peerDeviceId}) : super(const ChatState()) {
     on<LoadAllMessages>(_onLoad);
     on<SendTextMessage>(_onSendText);
     on<SendEmergencyBroadcast>(_onEmergency);
@@ -90,7 +91,11 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
 
   Future<void> _onLoad(LoadAllMessages e, Emitter<ChatState> emit) async {
     emit(state.copyWith(isLoading: true));
-    final msgs = await _db.getAllMessages();
+    final allMsgs = await _db.getAllMessages();
+    final msgs = allMsgs.where((m) => 
+      (m.senderId == peerDeviceId || m.receiverId == peerDeviceId) &&
+      m.type != MessageType.ack
+    ).toList();
     emit(state.copyWith(messages: msgs, isLoading: false));
   }
 
@@ -123,9 +128,19 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
   }
 
   void _onIncoming(_IncomingMessage e, Emitter<ChatState> emit) {
-    if (e.message.type.isEmergency && e.message.receiverId == Message.broadcastId) {
-      return;
-    }
+    // Block broadcast emergencies from chat
+    final isBroadcastEmergency =
+      e.message.type == MessageType.emergency &&
+      (e.message.receiverId == 'BROADCAST' ||
+       e.message.receiverId == Message.broadcastId ||
+       e.message.receiverId.isEmpty);
+    
+    if (isBroadcastEmergency) return;
+
+    // Skip messages not related to this peer
+    if (e.message.senderId != peerDeviceId &&
+        e.message.receiverId != peerDeviceId) return;
+
     // Insert into in-memory list immediately for real-time feel,
     // avoiding a full DB reload on every received message.
     final existing = state.messages;

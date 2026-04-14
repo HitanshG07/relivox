@@ -140,6 +140,7 @@ class CommunicationService {
   final Set<String> _connectingDevices = {};
   final Map<String, String> _endpointToName = {};
   final Map<String, DateTime> _endpointLastSeen = {};
+  final Map<String, String> _endpointToDeviceId = {}; // New map
   Timer? _cleanupTimer;
 
 
@@ -149,9 +150,10 @@ class CommunicationService {
     if (_isAdvertising) return;
     if (!await _requestPermissions()) return;
     try {
-      await _kChannel.invokeMethod('startAdvertising', {'userName': _identity.displayName});
+      final combinedName = "${_identity.displayName}|${_identity.deviceId}";
+      await _kChannel.invokeMethod('startAdvertising', {'userName': combinedName});
       _isAdvertising = true;
-      _log.i('Advertising started as "${_identity.displayName}"');
+      _log.i('Advertising started as "$combinedName"');
     } catch (e) {
       _log.e('startAdvertising failed: $e');
       rethrow;
@@ -224,17 +226,20 @@ class CommunicationService {
 
   Future<void> restartAdvertising(String newName) async {
     await _kChannel.invokeMethod('stopAdvertising');
-    await _kChannel.invokeMethod('startAdvertising', {'userName': newName});
-    _log.i('Advertising restarted with name: $newName');
+    final combinedName = "$newName|${_identity.deviceId}";
+    await _kChannel.invokeMethod('startAdvertising', {'userName': combinedName});
+    _log.i('Advertising restarted with name: $combinedName');
   }
 
   List<Peer> getCurrentPeers() {
     return _deviceEndpoints.keys.map((name) {
       final isConnected = _connectedDevices.contains(name);
       final isConnecting = _connectingDevices.contains(name);
+      final eid = _exposedIdForName[name] ?? '';
       return Peer(
-        endpointId: _exposedIdForName[name] ?? '',
+        endpointId: eid,
         displayName: name,
+        deviceId: _endpointToDeviceId[eid],
         status: isConnected ? PeerStatus.connected : (isConnecting ? PeerStatus.connecting : PeerStatus.discovered),
         lastSeen: DateTime.now().toUtc().toIso8601String(),
       );
@@ -338,16 +343,35 @@ class CommunicationService {
     switch (call.method) {
       case 'onEndpointFound':
         final eid = args['endpointId'] as String;
-        final name = args['endpointName'] as String? ?? eid;
+        final rawName = args['endpointName'] as String? ?? eid;
+        
+        final parts = rawName.split('|');
+        final displayName = parts[0];
+        final deviceId = parts.length > 1 ? parts[1] : null;
+
         _endpointLastSeen[eid] = DateTime.now();
-        _endpointToName[eid] = name;
-        if (!_deviceEndpoints.containsKey(name)) {
-          _deviceEndpoints[name] = {eid};
-          _exposedIdForName[name] = eid;
-        } else {
-          _deviceEndpoints[name]!.add(eid);
+        _endpointToName[eid] = displayName;
+        if (deviceId != null) {
+          _endpointToDeviceId[eid] = deviceId;
         }
-        _log.i('Device discovered: $name ($eid). Requesting connection (Bug 1 Step 1)...');
+
+        if (!_deviceEndpoints.containsKey(displayName)) {
+          _deviceEndpoints[displayName] = {eid};
+          _exposedIdForName[displayName] = eid;
+        } else {
+          _deviceEndpoints[displayName]!.add(eid);
+        }
+        
+        _log.i('Device discovered: $displayName ($eid) | ID: $deviceId. Requesting connection...');
+        
+        final peer = Peer(
+          endpointId: eid,
+          displayName: displayName,
+          deviceId: deviceId,
+          lastSeen: DateTime.now().toUtc().toIso8601String(),
+        );
+        _eventController.add(PeerDiscoveredEvent(peer));
+
         await _requestConnection(eid);
         break;
 
