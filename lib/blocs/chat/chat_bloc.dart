@@ -4,7 +4,6 @@ import 'package:equatable/equatable.dart';
 import '../../models/message.dart';
 import '../../services/communication_service.dart';
 import '../../services/database_service.dart';
-import '../../services/identity_service.dart';
 
 // ── Events ───────────────────────────────────────────────────────────────────
 
@@ -65,14 +64,10 @@ class ChatState extends Equatable {
 class ChatBloc extends Bloc<ChatEvent, ChatState> {
   final CommunicationService _comm;
   final DatabaseService _db;
-  final IdentityService _identity;
   final String peerDeviceId; // Persistent Peer Identity
   StreamSubscription<P2PEvent>? _sub;
 
-  // Monotonically-increasing sequence number per device session
-  int _seq = 0;
-
-  ChatBloc(this._comm, this._db, this._identity, {required this.peerDeviceId}) : super(const ChatState()) {
+  ChatBloc(this._comm, this._db, {required this.peerDeviceId}) : super(const ChatState()) {
     on<LoadAllMessages>(_onLoad);
     on<SendTextMessage>(_onSendText);
     on<SendEmergencyBroadcast>(_onEmergency);
@@ -100,32 +95,12 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
   }
 
   Future<void> _onSendText(SendTextMessage e, Emitter<ChatState> emit) async {
-    final msg = Message.create(
-      senderId: _identity.deviceId,
-      receiverId: peerDeviceId,
-      senderPubKey: _identity.publicKeyBase64,
-      payload: e.text,
-      type: MessageType.text,
-      priority: MessagePriority.normal,
-      ttl: 5,
-      seq: _seq++,
-    );
-    await _comm.broadcastMessage(msg);
+    await _comm.sendUserMessage(e.text, peerDeviceId, MessageType.text);
     add(LoadAllMessages());
   }
 
   Future<void> _onEmergency(SendEmergencyBroadcast e, Emitter<ChatState> emit) async {
-    final msg = Message.create(
-      senderId: _identity.deviceId,
-      receiverId: peerDeviceId,
-      senderPubKey: _identity.publicKeyBase64,
-      payload: e.text,
-      type: MessageType.emergency,
-      priority: MessagePriority.high,
-      ttl: 7, // Extra hops for emergency
-      seq: _seq++,
-    );
-    await _comm.broadcastMessage(msg);
+    await _comm.sendUserMessage(e.text, peerDeviceId, MessageType.emergency);
     add(LoadAllMessages());
   }
 

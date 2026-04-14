@@ -130,23 +130,4 @@ class NotificationService {
     );
   }
 
-  void _showInAppBanner(Message message) {
-    final context = navigatorKey.currentContext;
-    if (context == null) return;  // App not in foreground — skip
-
-    final isEmergency = message.type == MessageType.emergency;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          isEmergency
-              ? '🚨 EMERGENCY from ${message.senderId}: ${message.content}'
-              : '${message.senderId}: ${message.content}',
-          style: const TextStyle(color: Colors.white),
-        ),
-        backgroundColor:
-            isEmergency ? Colors.red.shade700 : Colors.grey.shade800,
-        duration: Duration(seconds: isEmergency ? 6 : 3),
-      ),
-    );
-  }
 }

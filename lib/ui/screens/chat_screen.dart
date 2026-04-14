@@ -26,7 +26,6 @@ class _ChatScreenState extends State<ChatScreen> {
       create: (context) => ChatBloc(
         context.read<CommunicationService>(),
         context.read<DatabaseService>(),
-        context.read<IdentityService>(),
         peerDeviceId: widget.targetPeer.deviceId ?? widget.targetPeer.endpointId,
       )..add(LoadAllMessages()),
       child: Builder(builder: (context) {

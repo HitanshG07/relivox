@@ -7,7 +7,6 @@ import 'services/communication_service.dart';
 import 'services/settings_service.dart';
 import 'services/notification_service.dart';
 import 'blocs/discovery/discovery_bloc.dart';
-import 'blocs/chat/chat_bloc.dart';
 import 'blocs/settings/settings_bloc.dart';
 import 'ui/screens/splash_screen.dart';
 

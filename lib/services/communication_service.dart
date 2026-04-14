@@ -63,7 +63,6 @@ class AckReceivedEvent extends P2PEvent {
   AckReceivedEvent(this.ackedMessageId, this.fromEndpointId);
 }
 
-enum DeviceState { READY, LIMITED, FULL }
 
 /// The central Dart service that talks to NearbyPlugin.kt via MethodChannel.
 class CommunicationService {
@@ -265,7 +264,7 @@ class CommunicationService {
   void cleanupStaleEndpoints() {
     final now = DateTime.now();
     final staleEndpoints = _endpointLastSeen.entries
-        .where((entry) => now.difference(entry.value).inSeconds > 2)
+        .where((entry) => now.difference(entry.value).inSeconds > 10)
         .map((entry) => entry.key)
         .toList();
     for (final eid in staleEndpoints) {
@@ -447,6 +446,13 @@ class CommunicationService {
         'endpointId': eid,
         'userName': _identity.displayName,
       });
+    } on PlatformException catch (e) {
+      if (e.code == '8003') {
+        _log.w('Already connected to $eid — syncing state');
+        await _acceptConnection(eid);
+      } else {
+        _log.e('requestConnection to $eid failed: $e');
+      }
     } catch (e) {
       _log.e('requestConnection to $eid failed: $e');
     }
