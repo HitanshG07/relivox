@@ -88,7 +88,7 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
       await _service.setUsername(event.value);
       await IdentityService().setDisplayName(event.value); // Sync with IdentityService
       emit(state.copyWith(username: event.value));
-      CommunicationService().forceRefresh();
+      await CommunicationService().restartAdvertising(event.value);
     });
 
     on<AllowRelayToggled>((event, emit) async {

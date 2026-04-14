@@ -62,17 +62,21 @@ class _IncomingBroadcastEmergency extends DiscoveryEvent {
   _IncomingBroadcastEmergency(this.message);
 }
 
+class ClearBroadcastLogEvent extends DiscoveryEvent {}
+
 class DiscoveryState extends Equatable {
   final List<Peer> peers;
   final bool isRunning;
   final String? error;
   final Message? latestBroadcastEmergency;
+  final List<Message> broadcastEmergencyLog;
 
   const DiscoveryState({
     this.peers = const [],
     this.isRunning = false,
     this.error,
     this.latestBroadcastEmergency,
+    this.broadcastEmergencyLog = const [],
   });
 
   DiscoveryState copyWith({
@@ -80,6 +84,7 @@ class DiscoveryState extends Equatable {
     bool? isRunning,
     String? error,
     Message? latestBroadcastEmergency,
+    List<Message>? broadcastEmergencyLog,
     bool clearEmergency = false,
   }) =>
       DiscoveryState(
@@ -88,10 +93,11 @@ class DiscoveryState extends Equatable {
         error: error,
         latestBroadcastEmergency:
             clearEmergency ? null : (latestBroadcastEmergency ?? this.latestBroadcastEmergency),
+        broadcastEmergencyLog: broadcastEmergencyLog ?? this.broadcastEmergencyLog,
       );
 
   @override
-  List<Object?> get props => [peers, isRunning, error, latestBroadcastEmergency];
+  List<Object?> get props => [peers, isRunning, error, latestBroadcastEmergency, broadcastEmergencyLog];
 }
 
 // ── BLoC ─────────────────────────────────────────────────────────────────────
@@ -113,6 +119,7 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
     on<ManualRefreshEvent>(_onManualRefresh);
     on<_IncomingBroadcastEmergency>(_onIncomingEmergency);
     on<ClearBroadcastEmergencyEvent>(_onClearEmergency);
+    on<ClearBroadcastLogEvent>(_onClearLog);
  
     _sub = _comm.events.listen(_routeEvent);
     _startRefreshTimer();
@@ -122,7 +129,7 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
  
   void _startRefreshTimer() {
     _refreshTimer?.cancel();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       add(RefreshPeersEvent());
     });
   }
@@ -188,21 +195,41 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
 
   Future<void> _onRefreshPeers(RefreshPeersEvent e, Emitter<DiscoveryState> emit) async {
     final currentPeers = _comm.getCurrentPeers();
-    // Rebuild peer list to match service reality
     final syncList = <Peer>[];
     for (var svcPeer in currentPeers) {
-      final existing = state.peers.toList().where((p) => p.displayName == svcPeer.displayName);
+      // Match by deviceId first, then fall back to displayName
+      final existing = state.peers.where((p) =>
+        (svcPeer.deviceId != null && p.deviceId == svcPeer.deviceId) ||
+        p.displayName == svcPeer.displayName
+      );
       if (existing.isNotEmpty) {
-        syncList.add(existing.first.copyWith(endpointId: svcPeer.endpointId));
+        // Update existing peer with new name + endpointId
+        syncList.add(existing.first.copyWith(
+          endpointId: svcPeer.endpointId,
+          displayName: svcPeer.displayName, // picks up new name
+        ));
       } else {
         syncList.add(svcPeer);
       }
     }
-    
-    // HARD DEDUPLICATION by displayName
-    final uniqueNames = <String>{};
-    final finalPeers = syncList.where((p) => uniqueNames.add(p.displayName)).toList();
-    
+
+    // Preserve connected peers
+    for (var statePeer in state.peers) {
+      if (statePeer.status == PeerStatus.connected) {
+        final alreadyIn = syncList.any((p) =>
+          (p.deviceId != null && p.deviceId == statePeer.deviceId) ||
+          p.displayName == statePeer.displayName
+        );
+        if (!alreadyIn) syncList.add(statePeer);
+      }
+    }
+
+    // Deduplicate by deviceId, then displayName as fallback
+    final seen = <String>{};
+    final finalPeers = syncList.where((p) =>
+      seen.add(p.deviceId ?? p.displayName)
+    ).toList();
+
     emit(state.copyWith(peers: finalPeers));
   }
 
@@ -219,11 +246,18 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
   }
 
   void _onIncomingEmergency(_IncomingBroadcastEmergency e, Emitter<DiscoveryState> emit) {
-    emit(state.copyWith(latestBroadcastEmergency: e.message));
+    emit(state.copyWith(
+      latestBroadcastEmergency: e.message,
+      broadcastEmergencyLog: [...state.broadcastEmergencyLog, e.message],
+    ));
   }
 
   void _onClearEmergency(ClearBroadcastEmergencyEvent e, Emitter<DiscoveryState> emit) {
     emit(state.copyWith(clearEmergency: true));
+  }
+
+  void _onClearLog(ClearBroadcastLogEvent e, Emitter<DiscoveryState> emit) {
+    emit(state.copyWith(broadcastEmergencyLog: []));
   }
 
   List<Peer> _upsertPeer(List<Peer> current, Peer peer) {

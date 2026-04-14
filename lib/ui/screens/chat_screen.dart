@@ -270,9 +270,10 @@ class _InputBar extends StatelessWidget {
                 Navigator.pop(ctx);
                 final text = controller.text.trim();
                 if (text.isNotEmpty) {
-                  // Uses the actual peer ID for direct personal emergency
+                  // Use deviceId so ChatBloc filter matches correctly
+                  final resolvedId = targetPeer.deviceId ?? targetPeer.endpointId;
                   await CommunicationService()
-                      .sendUserMessage(text, targetPeer.endpointId, MessageType.emergency);
+                      .sendUserMessage(text, resolvedId, MessageType.emergency);
                   if (context.mounted) {
                     context.read<ChatBloc>().add(LoadAllMessages());
                   }

@@ -20,6 +20,43 @@ class HomeScreen extends StatelessWidget {
         title: const Text('Relivox Local Mesh',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         actions: [
+          BlocBuilder<DiscoveryBloc, DiscoveryState>(
+            builder: (context, state) {
+              final hasAlerts = state.broadcastEmergencyLog.isNotEmpty;
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      Icons.notifications_active,
+                      color: hasAlerts ? Colors.redAccent : Colors.white38,
+                    ),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => BroadcastLogScreen(
+                          log: state.broadcastEmergencyLog,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (hasAlerts)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: Colors.redAccent,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white70),
             onPressed: () => Navigator.push(
@@ -379,5 +416,90 @@ class _PeerTile extends StatelessWidget {
     }
 
     return const Icon(Icons.chevron_right, color: Colors.white12);
+  }
+}
+
+class BroadcastLogScreen extends StatelessWidget {
+  final List<Message> log;
+  const BroadcastLogScreen({super.key, required this.log});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D0D1A),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF13132B),
+        title: const Row(
+          children: [
+            Icon(Icons.notifications_active, color: Colors.redAccent, size: 20),
+            SizedBox(width: 8),
+            Text('Broadcast Alerts',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        iconTheme: const IconThemeData(color: Colors.white70),
+        actions: [
+          TextButton(
+            onPressed: () {
+              context.read<DiscoveryBloc>().add(ClearBroadcastLogEvent());
+              Navigator.pop(context);
+            },
+            child: const Text('CLEAR ALL',
+                style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+          ),
+        ],
+      ),
+      body: log.isEmpty
+          ? const Center(
+              child: Text('No broadcast alerts received.',
+                  style: TextStyle(color: Colors.white38)),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: log.length,
+              itemBuilder: (context, i) {
+                final msg = log[log.length - 1 - i]; // newest first
+                final time = msg.parsedTimestamp.toLocal();
+                final timeStr =
+                    '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.campaign,
+                              color: Colors.redAccent, size: 16),
+                          const SizedBox(width: 6),
+                          Text(
+                            'FROM: ${msg.senderId.substring(msg.senderId.length - 6).toUpperCase()}',
+                            style: const TextStyle(
+                                color: Colors.redAccent,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold),
+                          ),
+                          const Spacer(),
+                          Text(timeStr,
+                              style: const TextStyle(
+                                  color: Colors.white38, fontSize: 10)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(msg.payload,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 14)),
+                    ],
+                  ),
+                );
+              },
+            ),
+    );
   }
 }
