@@ -249,7 +249,7 @@ class CommunicationService {
 
   void startCleanupTimer() {
     _cleanupTimer?.cancel();
-    _cleanupTimer = Timer.periodic(const Duration(seconds: 2), (_) => cleanupStaleEndpoints());
+    _cleanupTimer = Timer.periodic(const Duration(seconds: 1), (_) => cleanupStaleEndpoints());
     _seenCleanupTimer?.cancel();
     _seenCleanupTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       final now = DateTime.now();
@@ -266,7 +266,7 @@ class CommunicationService {
   void cleanupStaleEndpoints() {
     final now = DateTime.now();
     final staleEndpoints = _endpointLastSeen.entries
-        .where((entry) => now.difference(entry.value).inSeconds > 5)
+        .where((entry) => now.difference(entry.value).inSeconds > 2)
         .map((entry) => entry.key)
         .toList();
     for (final eid in staleEndpoints) {
@@ -522,6 +522,10 @@ class CommunicationService {
     await Future.delayed(const Duration(milliseconds: 500));
     await startDiscovery();
     await startAdvertising();
+  }
+
+  Future<void> forceRefresh() async {
+    await _restartDiscoveryAndAdvertising();
   }
 
   void dispose() {

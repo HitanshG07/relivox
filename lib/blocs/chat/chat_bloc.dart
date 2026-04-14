@@ -123,6 +123,9 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
   }
 
   void _onIncoming(_IncomingMessage e, Emitter<ChatState> emit) {
+    if (e.message.type.isEmergency && e.message.receiverId == Message.broadcastId) {
+      return;
+    }
     // Insert into in-memory list immediately for real-time feel,
     // avoiding a full DB reload on every received message.
     final existing = state.messages;

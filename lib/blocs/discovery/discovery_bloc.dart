@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../models/peer.dart';
+import '../../models/message.dart';
 import '../../services/communication_service.dart';
 
 // ── Events ───────────────────────────────────────────────────────────────────
@@ -52,30 +53,45 @@ class DisconnectFromPeerEvent extends DiscoveryEvent {
   DisconnectFromPeerEvent(this.deviceName);
 }
 
+class ManualRefreshEvent extends DiscoveryEvent {}
+
+class ClearBroadcastEmergencyEvent extends DiscoveryEvent {}
+
+class _IncomingBroadcastEmergency extends DiscoveryEvent {
+  final Message message;
+  _IncomingBroadcastEmergency(this.message);
+}
+
 class DiscoveryState extends Equatable {
   final List<Peer> peers;
   final bool isRunning;
   final String? error;
+  final Message? latestBroadcastEmergency;
 
   const DiscoveryState({
     this.peers = const [],
     this.isRunning = false,
     this.error,
+    this.latestBroadcastEmergency,
   });
 
   DiscoveryState copyWith({
     List<Peer>? peers,
     bool? isRunning,
     String? error,
+    Message? latestBroadcastEmergency,
+    bool clearEmergency = false,
   }) =>
       DiscoveryState(
         peers: peers ?? this.peers,
         isRunning: isRunning ?? this.isRunning,
         error: error,
+        latestBroadcastEmergency:
+            clearEmergency ? null : (latestBroadcastEmergency ?? this.latestBroadcastEmergency),
       );
 
   @override
-  List<Object?> get props => [peers, isRunning, error];
+  List<Object?> get props => [peers, isRunning, error, latestBroadcastEmergency];
 }
 
 // ── BLoC ─────────────────────────────────────────────────────────────────────
@@ -94,6 +110,9 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
     on<ConnectToPeerEvent>(_onConnectToPeer);
     on<RefreshPeersEvent>(_onRefreshPeers);
     on<DisconnectFromPeerEvent>(_onDisconnectFromPeer);
+    on<ManualRefreshEvent>(_onManualRefresh);
+    on<_IncomingBroadcastEmergency>(_onIncomingEmergency);
+    on<ClearBroadcastEmergencyEvent>(_onClearEmergency);
  
     _sub = _comm.events.listen(_routeEvent);
     _startRefreshTimer();
@@ -113,6 +132,13 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
     if (event is PeerLostEvent) add(_NativePeerLost(event.endpointId));
     if (event is PeerConnectedEvent) add(_NativePeerConnected(event.endpointId));
     if (event is PeerDisconnectedEvent) add(_NativePeerDisconnected(event.endpointId));
+
+    if (event is MessageReceivedEvent) {
+      final msg = event.message;
+      if (msg.type.isEmergency && msg.receiverId == Message.broadcastId) {
+        add(_IncomingBroadcastEmergency(msg));
+      }
+    }
   }
 
   Future<void> _onStart(StartDiscoveryEvent e, Emitter<DiscoveryState> emit) async {
@@ -187,6 +213,18 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
       return p;
     }).toList();
     emit(state.copyWith(peers: peers));
+  }
+
+  Future<void> _onManualRefresh(ManualRefreshEvent e, Emitter<DiscoveryState> emit) async {
+    await _comm.forceRefresh();
+  }
+
+  void _onIncomingEmergency(_IncomingBroadcastEmergency e, Emitter<DiscoveryState> emit) {
+    emit(state.copyWith(latestBroadcastEmergency: e.message));
+  }
+
+  void _onClearEmergency(ClearBroadcastEmergencyEvent e, Emitter<DiscoveryState> emit) {
+    emit(state.copyWith(clearEmergency: true));
   }
 
   List<Peer> _upsertPeer(List<Peer> current, Peer peer) {

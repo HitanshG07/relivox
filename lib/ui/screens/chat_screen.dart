@@ -3,11 +3,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../blocs/chat/chat_bloc.dart';
 import '../../models/message.dart';
+import '../../models/peer.dart';
 import '../../services/identity_service.dart';
 import '../../services/communication_service.dart';
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  final Peer targetPeer;
+  const ChatScreen({super.key, required this.targetPeer});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -23,13 +25,17 @@ class _ChatScreenState extends State<ChatScreen> {
       backgroundColor: const Color(0xFF0D0D1A),
       appBar: AppBar(
         backgroundColor: const Color(0xFF13132B),
-        title: const Text('Nearby Chat', style: TextStyle(color: Colors.white)),
+        title: Text(widget.targetPeer.displayName, style: const TextStyle(color: Colors.white)),
         iconTheme: const IconThemeData(color: Colors.white70),
       ),
       body: Column(
         children: [
           Expanded(child: _MessageList(scrollController: _scrollController)),
-          _InputBar(controller: _controller, onSend: _send),
+          _InputBar(
+            controller: _controller,
+            onSend: _send,
+            targetPeer: widget.targetPeer,
+          ),
         ],
       ),
     );
@@ -214,7 +220,12 @@ class _DeliveryIcon extends StatelessWidget {
 class _InputBar extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
-  const _InputBar({required this.controller, required this.onSend});
+  final Peer targetPeer;
+  const _InputBar({
+    required this.controller,
+    required this.onSend,
+    required this.targetPeer,
+  });
 
   void _showEmergencyOptions(BuildContext context) {
     showModalBottomSheet(
@@ -242,30 +253,15 @@ class _InputBar extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.person, color: Colors.white70),
               title: const Text('👤 PERSONAL', style: TextStyle(color: Colors.white)),
-              subtitle: const Text('Send to this contact only', style: TextStyle(color: Colors.white38, fontSize: 12)),
+              subtitle: Text('Send to ${targetPeer.displayName} only',
+                  style: const TextStyle(color: Colors.white38, fontSize: 12)),
               onTap: () async {
                 Navigator.pop(ctx);
                 final text = controller.text.trim();
                 if (text.isNotEmpty) {
-                  // Bug 2: PERSONAL emergency uses current chat's receiverId (empty for general)
-                  await CommunicationService().sendUserMessage(text, '', MessageType.emergency);
-                  if (context.mounted) {
-                    context.read<ChatBloc>().add(LoadAllMessages());
-                  }
-                  controller.clear();
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.campaign, color: Colors.white70),
-              title: const Text('📢 PUBLIC BROADCAST', style: TextStyle(color: Colors.white)),
-              subtitle: const Text('Send to ALL devices on the mesh', style: TextStyle(color: Colors.white38, fontSize: 12)),
-              onTap: () async {
-                Navigator.pop(ctx);
-                final text = controller.text.trim();
-                if (text.isNotEmpty) {
-                  // Bug 2: PUBLIC BROADCAST uses the BROADCAST reserved ID
-                  await CommunicationService().sendUserMessage(text, Message.broadcastId, MessageType.emergency);
+                  // Uses the actual peer ID for direct personal emergency
+                  await CommunicationService()
+                      .sendUserMessage(text, targetPeer.endpointId, MessageType.emergency);
                   if (context.mounted) {
                     context.read<ChatBloc>().add(LoadAllMessages());
                   }

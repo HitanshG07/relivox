@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../blocs/discovery/discovery_bloc.dart';
 import '../../blocs/settings/settings_bloc.dart';
+import '../../services/communication_service.dart';
+import '../../models/message.dart';
 import '../../models/peer.dart';
 import 'chat_screen.dart';
 import 'settings_screen.dart';
@@ -25,10 +27,15 @@ class HomeScreen extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const SettingsScreen()),
             ),
           ),
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.white70),
+            onPressed: () => context.read<DiscoveryBloc>().add(ManualRefreshEvent()),
+          ),
         ],
       ),
       body: Column(
         children: [
+          const _EmergencyBanner(),
           const _DiscoveryHeader(),
           Expanded(
             child: BlocBuilder<DiscoveryBloc, DiscoveryState>(
@@ -44,7 +51,140 @@ class HomeScreen extends StatelessWidget {
               },
             ),
           ),
+          const _BroadcastTrigger(),
         ],
+      ),
+    );
+  }
+}
+
+class _EmergencyBanner extends StatelessWidget {
+  const _EmergencyBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<DiscoveryBloc, DiscoveryState>(
+      builder: (context, state) {
+        final msg = state.latestBroadcastEmergency;
+        if (msg == null) return const SizedBox.shrink();
+
+        return Container(
+          width: double.infinity,
+          margin: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.redAccent,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.redAccent.withValues(alpha: 0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.campaign, color: Colors.white, size: 28),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'BROADCAST ALERT from ${msg.senderId.substring(msg.senderId.length - 4)}',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      msg.payload,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+                onPressed: () => context.read<DiscoveryBloc>().add(ClearBroadcastEmergencyEvent()),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _BroadcastTrigger extends StatelessWidget {
+  const _BroadcastTrigger();
+
+  void _showBroadcastDialog(BuildContext context) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF13132B),
+        title: const Text('📢 Broadcast Emergency', style: TextStyle(color: Colors.redAccent)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'Type emergency message to ALL...',
+            hintStyle: TextStyle(color: Colors.white24),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('CANCEL', style: TextStyle(color: Colors.white38)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () {
+              final text = controller.text.trim();
+              if (text.isNotEmpty) {
+                context.read<CommunicationService>().sendUserMessage(
+                      text,
+                      Message.broadcastId,
+                      MessageType.emergency,
+                    );
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('SEND TO ALL', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: SizedBox(
+        width: double.infinity,
+        height: 50,
+        child: ElevatedButton.icon(
+          onPressed: () => _showBroadcastDialog(context),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.redAccent,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          icon: const Icon(Icons.campaign),
+          label: const Text('📢 SEND BROADCAST EMERGENCY',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+        ),
       ),
     );
   }
@@ -192,13 +332,13 @@ class _PeerTile extends StatelessWidget {
         ),
         trailing: _buildTrailing(context, peer),
         onTap: () {
-          if (!isConnected && !isConnecting) {
-            context.read<DiscoveryBloc>().add(ConnectToPeerEvent(peer.displayName));
-          } else if (isConnected) {
+          if (peer.status == PeerStatus.discovered || isConnected) {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const ChatScreen()),
+              MaterialPageRoute(builder: (_) => ChatScreen(targetPeer: peer)),
             );
+          } else if (!isConnecting) {
+            context.read<DiscoveryBloc>().add(ConnectToPeerEvent(peer.displayName));
           }
         },
       ),
@@ -214,7 +354,7 @@ class _PeerTile extends StatelessWidget {
             icon: const Icon(Icons.chat_bubble_outline, color: Color(0xFF6C63FF)),
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const ChatScreen()),
+              MaterialPageRoute(builder: (_) => ChatScreen(targetPeer: peer)),
             ),
           ),
           IconButton(
