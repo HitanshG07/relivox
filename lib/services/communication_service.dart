@@ -358,10 +358,14 @@ class CommunicationService {
             .firstOrNull;
 
           if (staleEndpoint != null && staleEndpoint != eid) {
-            // Remove stale endpoint data so reconnect proceeds
-            _connectedDevices.remove(displayName);
-            _connectingDevices.remove(displayName);
+            // Find the OLD name associated with this endpoint to clear it
+            final oldName = _endpointToName[staleEndpoint];
+            if (oldName != null) {
+              _connectedDevices.remove(oldName);
+              _connectingDevices.remove(oldName);
+            }
             _endpointToDeviceId.remove(staleEndpoint);
+            _endpointToName.remove(staleEndpoint);
           }
         }
 
