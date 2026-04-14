@@ -87,10 +87,21 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
   Future<void> _onLoad(LoadAllMessages e, Emitter<ChatState> emit) async {
     emit(state.copyWith(isLoading: true));
     final allMsgs = await _db.getAllMessages();
-    final msgs = allMsgs.where((m) => 
-      (m.senderId == peerDeviceId || m.receiverId == peerDeviceId) &&
-      m.type != MessageType.ack
-    ).toList();
+    final msgs = allMsgs.where((m) {
+      // Block ACKs entirely
+      if (m.type == MessageType.ack) return false;
+
+      // Block broadcast emergencies — they belong in the log screen, not chat
+      final isBroadcast =
+          m.type == MessageType.emergency &&
+          (m.receiverId == Message.broadcastId ||
+           m.receiverId == 'BROADCAST' ||
+           m.receiverId.isEmpty);
+      if (isBroadcast) return false;
+
+      // Only show messages involving this peer
+      return m.senderId == peerDeviceId || m.receiverId == peerDeviceId;
+    }).toList();
     emit(state.copyWith(messages: msgs, isLoading: false));
   }
 
