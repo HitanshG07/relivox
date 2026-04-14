@@ -80,10 +80,10 @@ class NotificationService {
     if (message.type == MessageType.emergency) {
       if (!SettingsService().enableEmergencyAlerts) return;
       await _showEmergencyNotification(message);
-      _showInAppBanner(message);
+      // _showInAppBanner(message); // User requested removal
     } else {
       await _showNormalNotification(message);
-      _showInAppBanner(message);
+      // _showInAppBanner(message); // User requested removal
     }
   }
 
@@ -127,38 +127,6 @@ class NotificationService {
       '🚨 EMERGENCY ALERT',
       message.content,
       NotificationDetails(android: androidDetails),
-    );
-  }
-  void _showInAppBanner(Message message) {
-    final context = navigatorKey.currentContext;
-    if (context == null) return;
-    final isEmergency = message.type == MessageType.emergency;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: isEmergency ? Colors.red[800] : const Color(0xFF1A1A2E),
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: isEmergency ? 6 : 3),
-        content: Row(
-          children: [
-            Icon(
-              isEmergency ? Icons.warning_amber_rounded : Icons.message,
-              color: Colors.white,
-              size: 18,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                isEmergency
-                    ? '🚨 EMERGENCY from ${message.senderId}: ${message.content}'
-                    : 'Message from ${message.senderId}: ${message.content}',
-                style: const TextStyle(color: Colors.white),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
