@@ -113,6 +113,11 @@ class GossipManager {
     if (state == DeviceState.FULL && message.type.isNormal) {
       return;
     }
+    if (state == DeviceState.LIMITED &&
+        !message.type.isNormal &&
+        !message.type.isEmergency) {
+      return;
+    }
 
     // 4. Connectivity Check
     if (_connectedEndpoints.isEmpty) {

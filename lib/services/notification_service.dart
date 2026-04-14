@@ -33,10 +33,36 @@ class NotificationService {
       const InitializationSettings(
           android: androidSettings, iOS: iosSettings),
     );
-    await _plugin
+
+    final androidPlugin = _plugin
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
+            AndroidFlutterLocalNotificationsPlugin>();
+
+    await androidPlugin?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        'relivox_normal',
+        'Messages',
+        description: 'Normal Relivox messages',
+        importance: Importance.defaultImportance,
+        enableVibration: false,
+        playSound: true,
+      ),
+    );
+
+    await androidPlugin?.createNotificationChannel(
+      AndroidNotificationChannel(
+        'relivox_emergency',
+        'Emergency Alerts',
+        description: 'Emergency Relivox alerts',
+        importance: Importance.max,
+        enableVibration: true,
+        vibrationPattern: Int64List.fromList([0, 500, 200, 500]),
+        ledColor: const Color(0xFFFF0000),
+        playSound: true,
+      ),
+    );
+
+    await androidPlugin?.requestNotificationsPermission();
   }
 
   /// MAIN ENTRY POINT

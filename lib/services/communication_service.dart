@@ -351,10 +351,17 @@ class CommunicationService {
     final due = await _db.getDuePending();
     for (final row in due) {
       final msg = Message.fromMap(row);
+      bool sent = false;
       for (final eid in _connectedEndpoints) {
         try {
-          await _kChannel.invokeMethod('sendPayload', {'endpointId': eid, 'payload': msg.toWireJson()});
+          await _kChannel.invokeMethod('sendPayload',
+              {'endpointId': eid, 'payload': msg.toWireJson()});
+          sent = true;
+          break;
         } catch (_) {}
+      }
+      if (sent) {
+        await _db.deletePending(msg.id);
       }
     }
   }
@@ -456,18 +463,47 @@ class CommunicationService {
     _seenMessageIds.add(incoming.id);
     _seenMessageTimestamps[incoming.id] = DateTime.now();
 
+    if (incoming.type == MessageType.ack) {
+      _gossip.recordAck(incoming.payload, eid);
+      _eventController.add(AckReceivedEvent(incoming.payload, eid));
+      return;
+    }
+
     final processedMessage = incoming.copyWith(
       ttl: incoming.ttl - 1,
       hops: incoming.hops + 1,
     );
-    if (processedMessage.ttl <= 0) return;
 
     final myId = _identity.deviceId;
-    if (processedMessage.receiverId == myId || processedMessage.receiverId == Message.broadcastId) {
+    final isFinalReceiver =
+        processedMessage.receiverId == myId ||
+        processedMessage.receiverId == Message.broadcastId;
+
+    if (!isFinalReceiver && processedMessage.ttl <= 0) return;
+
+    if (isFinalReceiver) {
       await _db.upsertMessage(processedMessage);
       _eventController.add(MessageReceivedEvent(processedMessage, eid));
+      await NotificationService().show(processedMessage);
+      if (processedMessage.type != MessageType.ack) {
+        final ack = Message(
+          id: const Uuid().v4(),
+          type: MessageType.ack,
+          senderId: _identity.deviceId,
+          receiverId: processedMessage.senderId,
+          timestamp: DateTime.now().toUtc().toIso8601String(),
+          ttl: 3,
+          hops: 0,
+          seq: 0,
+          priority: MessagePriority.normal,
+          payload: processedMessage.id,
+        );
+        await _gossip.send(ack);
+      }
+      return;
     }
 
+    if (processedMessage.ttl <= 0) return;
     await NotificationService().show(processedMessage);
     debugPrint('MESH RELAY: ${processedMessage.id} | Recipients: ${_connectedEndpoints.length} peers connected');
     await _gossip.relay(processedMessage, eid);
