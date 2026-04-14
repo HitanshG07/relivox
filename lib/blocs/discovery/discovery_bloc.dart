@@ -152,7 +152,6 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
 
   Future<void> _onStop(StopDiscoveryEvent e, Emitter<DiscoveryState> emit) async {
     await _comm.stopAll();
-    _comm.stopRetryLoop();
     emit(const DiscoveryState(peers: [], isRunning: false));
   }
 

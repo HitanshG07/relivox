@@ -22,6 +22,10 @@ class EmergencyAlertsToggled   extends SettingsEvent {
   final bool value;
   EmergencyAlertsToggled(this.value);
 }
+class DeviceStateChanged       extends SettingsEvent {
+  final String value;
+  DeviceStateChanged(this.value);
+}
 
 // ── STATE ────────────────────────────────────────────────────
 class SettingsState {
@@ -29,12 +33,14 @@ class SettingsState {
   final bool   allowRelay;
   final bool   enableNotifications;
   final bool   enableEmergencyAlerts;
+  final String forcedDeviceState;
 
   const SettingsState({
     required this.username,
     required this.allowRelay,
     required this.enableNotifications,
     required this.enableEmergencyAlerts,
+    required this.forcedDeviceState,
   });
 
   SettingsState copyWith({
@@ -42,12 +48,14 @@ class SettingsState {
     bool? allowRelay,
     bool? enableNotifications,
     bool? enableEmergencyAlerts,
+    String? forcedDeviceState,
   }) {
     return SettingsState(
       username:             username             ?? this.username,
       allowRelay:           allowRelay           ?? this.allowRelay,
       enableNotifications:  enableNotifications  ?? this.enableNotifications,
       enableEmergencyAlerts:enableEmergencyAlerts?? this.enableEmergencyAlerts,
+      forcedDeviceState:     forcedDeviceState     ?? this.forcedDeviceState,
     );
   }
 }
@@ -62,6 +70,7 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
           allowRelay:           _service.allowRelay,
           enableNotifications:  _service.enableNotifications,
           enableEmergencyAlerts:_service.enableEmergencyAlerts,
+          forcedDeviceState:     _service.forcedDeviceState,
         )) {
 
     on<SettingsLoaded>((event, emit) {
@@ -70,6 +79,7 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
         allowRelay:           _service.allowRelay,
         enableNotifications:  _service.enableNotifications,
         enableEmergencyAlerts:_service.enableEmergencyAlerts,
+        forcedDeviceState:     _service.forcedDeviceState,
       ));
     });
 
@@ -92,6 +102,11 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     on<EmergencyAlertsToggled>((event, emit) async {
       await _service.setEnableEmergencyAlerts(event.value);
       emit(state.copyWith(enableEmergencyAlerts: event.value));
+    });
+
+    on<DeviceStateChanged>((event, emit) async {
+      await _service.setForcedDeviceState(event.value);
+      emit(state.copyWith(forcedDeviceState: event.value));
     });
   }
 }

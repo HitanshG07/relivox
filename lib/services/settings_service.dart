@@ -13,6 +13,7 @@ class SettingsService {
   bool   allowRelay             = true;
   bool   enableNotifications    = true;
   bool   enableEmergencyAlerts  = true;
+  String forcedDeviceState      = 'AUTO';
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
@@ -24,6 +25,7 @@ class SettingsService {
     allowRelay            = _prefs.getBool(SettingsKeys.allowRelay)            ?? true;
     enableNotifications   = _prefs.getBool(SettingsKeys.enableNotifications)     ?? true;
     enableEmergencyAlerts = _prefs.getBool(SettingsKeys.enableEmergencyAlerts)   ?? true;
+    forcedDeviceState     = _prefs.getString(SettingsKeys.forcedDeviceState)     ?? 'AUTO';
   }
 
   Future<void> setUsername(String value) async {
@@ -44,5 +46,10 @@ class SettingsService {
   Future<void> setEnableEmergencyAlerts(bool value) async {
     enableEmergencyAlerts = value;
     await _prefs.setBool(SettingsKeys.enableEmergencyAlerts, value);
+  }
+
+  Future<void> setForcedDeviceState(String value) async {
+    forcedDeviceState = value;
+    await _prefs.setString(SettingsKeys.forcedDeviceState, value);
   }
 }

@@ -70,6 +70,39 @@ class SettingsScreen extends StatelessWidget {
                 ),
 
                 const SizedBox(height: 24),
+                const _SectionHeader('Mesh Diagnostics'),
+                _SettingCard(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Device State',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+                          Text('Manual override for testing relay rules.',
+                              style: TextStyle(color: Colors.white38, fontSize: 11)),
+                        ],
+                      ),
+                      DropdownButton<String>(
+                        dropdownColor: const Color(0xFF13132B),
+                        value: state.forcedDeviceState,
+                        underline: const SizedBox(),
+                        style: const TextStyle(color: Color(0xFF6C63FF), fontWeight: FontWeight.bold),
+                        onChanged: (val) {
+                          if (val != null) {
+                            context.read<SettingsBloc>().add(DeviceStateChanged(val));
+                          }
+                        },
+                        items: ['AUTO', 'READY', 'LIMITED', 'FULL']
+                            .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                            .toList(),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 24),
                 const _SectionHeader('About'),
                 _SettingCard(
                   child: const Column(

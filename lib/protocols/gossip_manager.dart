@@ -62,6 +62,14 @@ class GossipManager {
   }
 
   DeviceState get currentState {
+    final forced = SettingsService().forcedDeviceState;
+    if (forced != 'AUTO') {
+      return DeviceState.values.firstWhere(
+        (e) => e.toString().split('.').last == forced,
+        orElse: () => DeviceState.READY,
+      );
+    }
+
     if (_pendingQueue.length < 30) return DeviceState.READY;
     if (_pendingQueue.length >= 50) return DeviceState.FULL;
     return DeviceState.LIMITED;
@@ -188,6 +196,9 @@ class GossipManager {
   /// Retries sending all pending messages to all connected endpoints.
   void _retryPendingMessages() async {
     if (_connectedEndpoints.isEmpty) return;
+    if (_pendingQueue.isEmpty) return;
+
+    debugPrint('[FLUSH-TRACE] Attempting to flush ${_pendingQueue.length} messages to ${_connectedEndpoints.length} peers');
 
     // Snapshot avoid concurrent modification
     final snapshot = List<_PendingMessage>.from(_pendingQueue);
@@ -201,6 +212,7 @@ class GossipManager {
           // Success
           _pendingQueue.remove(pending);
           DatabaseService().removePendingMessage(pending.message.id);
+          debugPrint('[FLUSH-TRACE] Successfully delivered ${pending.message.id} to $endpoint');
           sent = true;
           break; // Stop trying other endpoints for this message
         } catch (e) {

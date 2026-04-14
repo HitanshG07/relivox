@@ -135,14 +135,12 @@ class CommunicationService {
   final Map<String, DateTime> _seenMessageTimestamps = {};
   Timer? _seenCleanupTimer;
 
-  bool _needsRetry = false;
   final Map<String, String> _exposedIdForName = {};
   final Set<String> _connectedDevices = {};
   final Set<String> _connectingDevices = {};
   final Map<String, String> _endpointToName = {};
   final Map<String, DateTime> _endpointLastSeen = {};
   Timer? _cleanupTimer;
-  Timer? _retryTimer;
 
 
   // ── Advertising & Discovery ───────────────────────────────────────────────
@@ -174,12 +172,10 @@ class CommunicationService {
   }
 
   void _resetState() {
-    _deviceEndpoints.clear();
-    _exposedIdForName.clear();
-    _connectedDevices.clear();
-    _connectingDevices.clear();
     _endpointToName.clear();
-    _connectedEndpoints.clear();
+    _endpointLastSeen.clear();
+    _deviceEndpoints.clear();
+    _seenMessageTimestamps.clear();
   }
 
   Future<void> startAll() async {
@@ -189,7 +185,6 @@ class CommunicationService {
     await startAdvertising();
     await startDiscovery();
     startCleanupTimer();
-    startRetryLoop();
     _log.i('Communication system started');
   }
 
@@ -200,7 +195,6 @@ class CommunicationService {
       await stopDiscovery();
       await stopAdvertising();
       stopCleanupTimer();
-      stopRetryLoop();
       await _kChannel.invokeMethod('stopAll');
       _resetState();
     } catch (e) {
@@ -284,7 +278,6 @@ class CommunicationService {
     if (endpointId == null) return;
     _connectingDevices.add(name);
     await _requestConnection(endpointId);
-    _needsRetry = true;
   }
  
   Future<void> disconnectFromDevice(String name) async {
@@ -338,36 +331,6 @@ class CommunicationService {
     await _kChannel.invokeMethod('broadcastPayload', {'payload': updatedMessage.toWireJson()});
   }
 
-  // ── Retry loop ────────────────────────────────────────────────────────────
-
-  void startRetryLoop() {
-    _retryTimer?.cancel();
-    _retryTimer = Timer.periodic(const Duration(seconds: 5), (_) => _flush());
-  }
-
-  void stopRetryLoop() { _retryTimer?.cancel(); }
-
-  Future<void> _flush() async {
-    if (!_needsRetry || _connectedEndpoints.isEmpty) return;
-    _needsRetry = false;
-    final due = await _db.getDuePending();
-    for (final row in due) {
-      final msg = Message.fromMap(row);
-      bool sent = false;
-      for (final eid in _connectedEndpoints) {
-        try {
-          await _kChannel.invokeMethod('sendPayload',
-              {'endpointId': eid, 'payload': msg.toWireJson()});
-          sent = true;
-          break;
-        } catch (_) {}
-      }
-      if (sent) {
-        await _db.deletePending(msg.id);
-      }
-    }
-  }
-
   // ── Native → Dart callbacks ───────────────────────────────────────────────
 
   Future<void> _onNativeCall(MethodCall call) async {
@@ -384,7 +347,6 @@ class CommunicationService {
         } else {
           _deviceEndpoints[name]!.add(eid);
         }
-        _needsRetry = true;
         _log.i('Device discovered: $name ($eid). Requesting connection (Bug 1 Step 1)...');
         await _requestConnection(eid);
         break;
@@ -408,7 +370,6 @@ class CommunicationService {
           _gossip.onEndpointConnected(eid);
           _log.i('Connected to $eid (Bug 1 Step 3)');
           _eventController.add(PeerConnectedEvent(eid));
-          _needsRetry = true;
         } else {
           _eventController.add(PeerFailedEvent(eid, code));
         }
@@ -530,7 +491,6 @@ class CommunicationService {
 
   void dispose() {
     stopCleanupTimer();
-    stopRetryLoop();
     _gossip.dispose();
     _eventController.close();
   }
