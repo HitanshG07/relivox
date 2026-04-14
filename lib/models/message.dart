@@ -176,5 +176,5 @@ class Message extends Equatable {
   String get content => payload;
 
   @override
-  List<Object?> get props => [id, senderId, seq];
+  List<Object?> get props => [id, timestamp, deliveryStatus];
 }

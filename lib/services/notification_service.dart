@@ -80,10 +80,10 @@ class NotificationService {
     if (message.type == MessageType.emergency) {
       if (!SettingsService().enableEmergencyAlerts) return;
       await _showEmergencyNotification(message);
-      _showInAppBanner(message);
+      // _showInAppBanner(message); // User requested removal
     } else {
       await _showNormalNotification(message);
-      _showInAppBanner(message);
+      // _showInAppBanner(message); // User requested removal
     }
   }
 
