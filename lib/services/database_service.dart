@@ -92,7 +92,7 @@ class DatabaseService {
 
   Future<List<Message>> getAllMessages() async {
     final d = await db;
-    final rows = await d.query('messages', orderBy: 'timestamp ASC');
+    final rows = await d.query('messages', orderBy: 'timestamp DESC');
     return rows.map((r) => Message.fromMap(r)).toList();
   }
 

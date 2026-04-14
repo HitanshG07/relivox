@@ -464,8 +464,11 @@ class CommunicationService {
     _seenMessageTimestamps[incoming.id] = DateTime.now();
 
     if (incoming.type == MessageType.ack) {
-      _gossip.recordAck(incoming.payload, eid);
-      _eventController.add(AckReceivedEvent(incoming.payload, eid));
+      final ackedId = incoming.payload;
+      _log.i('💡 [ACK-TRACE] Caught ACK for message $ackedId from $eid');
+      await _db.updateDeliveryStatus(ackedId, DeliveryStatus.acked);
+      _gossip.recordAck(ackedId, eid);
+      _eventController.add(AckReceivedEvent(ackedId, eid));
       return;
     }
 
@@ -487,6 +490,7 @@ class CommunicationService {
       _eventController.add(MessageReceivedEvent(processedMessage, eid));
       await NotificationService().show(processedMessage);
       if (processedMessage.type != MessageType.ack) {
+        _log.i('💡 [ACK-TRACE] Generating auto-ACK for message ${processedMessage.id} to ${processedMessage.senderId}');
         final ack = Message(
           id: const Uuid().v4(),
           type: MessageType.ack,
