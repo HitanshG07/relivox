@@ -373,7 +373,7 @@ class _PeerTile extends StatelessWidget {
         ),
         trailing: _buildTrailing(context, peer),
         onTap: () {
-          if (peer.status == PeerStatus.discovered || isConnected) {
+          if (isConnected) {
             Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => ChatScreen(targetPeer: peer)),
@@ -415,7 +415,12 @@ class _PeerTile extends StatelessWidget {
       );
     }
 
-    return const Icon(Icons.chevron_right, color: Colors.white12);
+    return IconButton(
+      icon: const Icon(Icons.link, color: Colors.blueAccent),
+      tooltip: 'Connect',
+      onPressed: () =>
+          context.read<DiscoveryBloc>().add(ConnectToPeerEvent(peer.displayName)),
+    );
   }
 }
 
