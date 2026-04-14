@@ -477,7 +477,8 @@ class CommunicationService {
     final myId = _identity.deviceId;
     final isFinalReceiver =
         processedMessage.receiverId == myId ||
-        processedMessage.receiverId == Message.broadcastId;
+        processedMessage.receiverId == Message.broadcastId ||
+        processedMessage.receiverId.isEmpty;
 
     if (!isFinalReceiver && processedMessage.ttl <= 0) return;
 

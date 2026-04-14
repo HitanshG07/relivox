@@ -55,6 +55,7 @@ class Message extends Equatable {
     MessageType type = MessageType.text,
     MessagePriority priority = MessagePriority.normal,
     String? senderPubKey,
+    String receiverId = Message.broadcastId,
     int ttl = 5,
     int seq = 0,
   }) {
@@ -69,6 +70,7 @@ class Message extends Equatable {
       seq: seq,
       priority: priority,
       payload: payload,
+      receiverId: receiverId,
       deliveryStatus: DeliveryStatus.sending,
     );
   }
