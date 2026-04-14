@@ -13,7 +13,7 @@ class DatabaseService {
   DatabaseService._internal();
 
   static const _dbName = 'relivox.db';
-  static const _dbVersion = 1;
+  static const _dbVersion = 2;
   Database? _db;
 
   Future<Database> get db async {
@@ -37,6 +37,7 @@ class DatabaseService {
         id              TEXT PRIMARY KEY,
         type            TEXT NOT NULL,
         sender_id       TEXT NOT NULL,
+        receiver_id     TEXT NOT NULL DEFAULT '',
         sender_pubkey   TEXT,
         timestamp       TEXT NOT NULL,
         ttl             INTEGER NOT NULL,
@@ -54,6 +55,7 @@ class DatabaseService {
         id              TEXT PRIMARY KEY,
         type            TEXT NOT NULL,
         sender_id       TEXT NOT NULL,
+        receiver_id     TEXT NOT NULL DEFAULT '',
         sender_pubkey   TEXT,
         timestamp       TEXT NOT NULL,
         ttl             INTEGER NOT NULL,
@@ -73,7 +75,11 @@ class DatabaseService {
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     _log.i('Upgrading DB from $oldVersion to $newVersion');
-    // Future migrations go here
+    if (oldVersion < 2) {
+      await db.execute("ALTER TABLE messages ADD COLUMN receiver_id TEXT NOT NULL DEFAULT ''");
+      await db.execute("ALTER TABLE pending_outbound ADD COLUMN receiver_id TEXT NOT NULL DEFAULT ''");
+      _log.i('Added receiver_id column to tables');
+    }
   }
 
   // ── Messages (received + sent archive) ──────────────────────────────────────
