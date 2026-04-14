@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../blocs/settings/settings_bloc.dart';
@@ -199,6 +200,7 @@ class _UsernameCard extends StatefulWidget {
 class _UsernameCardState extends State<_UsernameCard> {
   late TextEditingController _ctrl;
   final FocusNode _focusNode = FocusNode();
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -208,6 +210,12 @@ class _UsernameCardState extends State<_UsernameCard> {
       if (!_focusNode.hasFocus) {
         _save();
       }
+    });
+    _ctrl.addListener(() {
+      if (_debounce?.isActive ?? false) _debounce!.cancel();
+      _debounce = Timer(const Duration(milliseconds: 500), () {
+        _save();
+      });
     });
   }
 
@@ -246,6 +254,7 @@ class _UsernameCardState extends State<_UsernameCard> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _ctrl.dispose();
     _focusNode.dispose();
     super.dispose();
