@@ -187,9 +187,31 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
 
   void _onConnected(_NativePeerConnected e, Emitter<DiscoveryState> emit) {
     final peers = state.peers.map((p) {
-      if (p.endpointId == e.endpointId) return p.copyWith(status: PeerStatus.connected);
+      // Match by endpointId OR update endpointId if deviceId matches
+      if (p.endpointId == e.endpointId) {
+        return p.copyWith(status: PeerStatus.connected);
+      }
       return p;
     }).toList();
+
+    // If no match found by endpointId, refresh immediately from service
+    final matched = peers.any((p) => p.status == PeerStatus.connected && p.endpointId == e.endpointId);
+    if (!matched) {
+      final fresh = _comm.getCurrentPeers();
+      final merged = fresh.map((fp) {
+        final existing = state.peers.where((p) =>
+          (fp.deviceId != null && p.deviceId == fp.deviceId) ||
+          p.displayName == fp.displayName
+        ).firstOrNull;
+        if (existing != null && fp.endpointId == e.endpointId) {
+          return fp.copyWith(status: PeerStatus.connected);
+        }
+        return fp;
+      }).toList();
+      emit(state.copyWith(peers: merged));
+      return;
+    }
+
     emit(state.copyWith(peers: peers));
   }
 

@@ -281,7 +281,9 @@ class CommunicationService {
   }
 
   Future<void> connectToDevice(String name) async {
-    if (_connectingDevices.contains(name) || _connectedDevices.contains(name)) return;
+    if (_connectedDevices.contains(name)) return;
+    // Clear any stuck connecting state before retrying
+    _connectingDevices.remove(name);
     final endpointId = _exposedIdForName[name];
     if (endpointId == null) return;
     _connectingDevices.add(name);
@@ -434,6 +436,8 @@ class CommunicationService {
           _log.i('Connected to $eid (Bug 1 Step 3)');
           _eventController.add(PeerConnectedEvent(eid));
         } else {
+          // Clear connecting state so user can retry
+          if (name != null) _connectingDevices.remove(name);
           _eventController.add(PeerFailedEvent(eid, code));
         }
         break;
