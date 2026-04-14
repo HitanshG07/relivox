@@ -229,6 +229,13 @@ class GossipManager {
   bool hasBeenAcked(String messageId) =>
       (_acks[messageId]?.isNotEmpty) ?? false;
 
+  void flush() {
+    debugPrint('[FLUSH-TRACE] Manual flush triggered. '
+      'Queue: ${_pendingQueue.length} msgs, '
+      'Endpoints: ${_connectedEndpoints.length}');
+    _retryPendingMessages();
+  }
+
   DeviceState? _debugState;
   void debugForceState(DeviceState state) {
     _debugState = state;

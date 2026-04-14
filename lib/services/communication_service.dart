@@ -347,12 +347,28 @@ class CommunicationService {
         
         final parts = rawName.split('|');
         final displayName = parts[0];
-        final deviceId = parts.length > 1 ? parts[1] : null;
+        final incomingDeviceId = parts.length > 1 ? parts[1] : null;
+
+        // If this deviceId is known, clear its stale state
+        // so reconnection is not blocked
+        if (incomingDeviceId != null) {
+          final staleEndpoint = _endpointToDeviceId.entries
+            .where((e) => e.value == incomingDeviceId)
+            .map((e) => e.key)
+            .firstOrNull;
+
+          if (staleEndpoint != null && staleEndpoint != eid) {
+            // Remove stale endpoint data so reconnect proceeds
+            _connectedDevices.remove(displayName);
+            _connectingDevices.remove(displayName);
+            _endpointToDeviceId.remove(staleEndpoint);
+          }
+        }
 
         _endpointLastSeen[eid] = DateTime.now();
         _endpointToName[eid] = displayName;
-        if (deviceId != null) {
-          _endpointToDeviceId[eid] = deviceId;
+        if (incomingDeviceId != null) {
+          _endpointToDeviceId[eid] = incomingDeviceId;
         }
 
         if (!_deviceEndpoints.containsKey(displayName)) {
@@ -362,12 +378,12 @@ class CommunicationService {
           _deviceEndpoints[displayName]!.add(eid);
         }
         
-        _log.i('Device discovered: $displayName ($eid) | ID: $deviceId. Requesting connection...');
+        _log.i('Device discovered: $displayName ($eid) | ID: $incomingDeviceId. Requesting connection...');
         
         final peer = Peer(
           endpointId: eid,
           displayName: displayName,
-          deviceId: deviceId,
+          deviceId: incomingDeviceId,
           lastSeen: DateTime.now().toUtc().toIso8601String(),
         );
         _eventController.add(PeerDiscoveredEvent(peer));
@@ -392,6 +408,8 @@ class CommunicationService {
           if (name != null) _connectedDevices.add(name);
           _connectedEndpoints.add(eid);
           _gossip.onEndpointConnected(eid);
+          _gossip.flush();
+          debugPrint('[FLUSH-TRACE] Flush triggered after connection established with $eid');
           _log.i('Connected to $eid (Bug 1 Step 3)');
           _eventController.add(PeerConnectedEvent(eid));
         } else {

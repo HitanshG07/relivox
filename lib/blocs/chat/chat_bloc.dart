@@ -102,6 +102,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
   Future<void> _onSendText(SendTextMessage e, Emitter<ChatState> emit) async {
     final msg = Message.create(
       senderId: _identity.deviceId,
+      receiverId: peerDeviceId,
       senderPubKey: _identity.publicKeyBase64,
       payload: e.text,
       type: MessageType.text,
@@ -116,6 +117,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
   Future<void> _onEmergency(SendEmergencyBroadcast e, Emitter<ChatState> emit) async {
     final msg = Message.create(
       senderId: _identity.deviceId,
+      receiverId: peerDeviceId,
       senderPubKey: _identity.publicKeyBase64,
       payload: e.text,
       type: MessageType.emergency,
@@ -127,26 +129,31 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     add(LoadAllMessages());
   }
 
-  void _onIncoming(_IncomingMessage e, Emitter<ChatState> emit) {
-    // Block broadcast emergencies from chat
+  void _onIncoming(_IncomingMessage event, Emitter<ChatState> emit) {
+    // Step 1: Identify broadcast emergency
     final isBroadcastEmergency =
-      e.message.type == MessageType.emergency &&
-      (e.message.receiverId == 'BROADCAST' ||
-       e.message.receiverId == Message.broadcastId ||
-       e.message.receiverId.isEmpty);
-    
+      event.message.type == MessageType.emergency &&
+      (event.message.receiverId == 'BROADCAST' ||
+       event.message.receiverId == Message.broadcastId ||
+       event.message.receiverId.isEmpty);
+
+    // Step 2: Block broadcast from chat
     if (isBroadcastEmergency) return;
 
-    // Skip messages not related to this peer
-    if (e.message.senderId != peerDeviceId &&
-        e.message.receiverId != peerDeviceId) return;
+    // Step 3: Block messages unrelated to this peer
+    // BUT let personal emergencies through
+    if (event.message.senderId != peerDeviceId &&
+        event.message.receiverId != peerDeviceId) return;
+
+    // Everything else (normal + personal emergency)
+    // falls through to be shown in chat
 
     // Insert into in-memory list immediately for real-time feel,
     // avoiding a full DB reload on every received message.
     final existing = state.messages;
-    final alreadyExists = existing.any((m) => m.id == e.message.id);
+    final alreadyExists = existing.any((m) => m.id == event.message.id);
     if (!alreadyExists) {
-      final updated = [e.message, ...existing];
+      final updated = [event.message, ...existing];
       emit(state.copyWith(messages: updated));
     }
   }

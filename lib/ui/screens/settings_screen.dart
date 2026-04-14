@@ -78,7 +78,7 @@ class SettingsScreen extends StatelessWidget {
                       const Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Device State',
+                          Text('Device State Override',
                               style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
                           Text('Manual override for testing relay rules.',
                               style: TextStyle(color: Colors.white38, fontSize: 11)),
