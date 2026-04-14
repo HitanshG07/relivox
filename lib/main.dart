@@ -1,0 +1,99 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'services/identity_service.dart';
+import 'services/database_service.dart';
+import 'services/communication_service.dart';
+import 'services/settings_service.dart';
+import 'services/notification_service.dart';
+import 'blocs/discovery/discovery_bloc.dart';
+import 'blocs/chat/chat_bloc.dart';
+import 'blocs/settings/settings_bloc.dart';
+import 'ui/screens/splash_screen.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await SettingsService().init();
+  await NotificationService().init();
+
+  // Lock to portrait for consistent P2P interaction UX
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+  ]);
+
+  // Initialise services
+  final identityService = IdentityService();
+  await identityService.init();
+
+  final databaseService = DatabaseService();
+  final communicationService = CommunicationService(identityService, databaseService);
+
+  runApp(
+    RelivoxApp(
+      identityService: identityService,
+      databaseService: databaseService,
+      communicationService: communicationService,
+    ),
+  );
+}
+
+class RelivoxApp extends StatelessWidget {
+  final IdentityService identityService;
+  final DatabaseService databaseService;
+  final CommunicationService communicationService;
+
+  const RelivoxApp({
+    super.key,
+    required this.identityService,
+    required this.databaseService,
+    required this.communicationService,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiRepositoryProvider(
+      providers: [
+        RepositoryProvider.value(value: identityService),
+        RepositoryProvider.value(value: databaseService),
+        RepositoryProvider.value(value: communicationService),
+      ],
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider(
+            create: (_) => DiscoveryBloc(communicationService),
+          ),
+          BlocProvider(
+            create: (_) => ChatBloc(communicationService, databaseService, identityService)
+              ..add(LoadAllMessages()),
+          ),
+          BlocProvider(
+            create: (_) => SettingsBloc(SettingsService())..add(SettingsLoaded()),
+          ),
+        ],
+        child: MaterialApp(
+          title: 'Relivox',
+          navigatorKey: NotificationService.navigatorKey,
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(
+            brightness: Brightness.dark,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: const Color(0xFF6C63FF),
+              brightness: Brightness.dark,
+            ),
+            scaffoldBackgroundColor: const Color(0xFF0D0D1A),
+            appBarTheme: const AppBarTheme(
+              backgroundColor: Color(0xFF13132B),
+              elevation: 0,
+              titleTextStyle: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600),
+            ),
+            useMaterial3: true,
+          ),
+          home: const SplashScreen(),
+        ),
+      ),
+    );
+  }
+}

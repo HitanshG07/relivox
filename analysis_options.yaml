@@ -1,0 +1,13 @@
+analyzer:
+  exclude:
+    - build/**
+  language:
+    strict-casts: false
+    strict-raw-types: false
+
+linter:
+  rules:
+    # Disable noisy rules that don't affect correctness
+    - avoid_print: false
+    - prefer_const_constructors: false
+    - prefer_const_literals_to_create_immutables: false

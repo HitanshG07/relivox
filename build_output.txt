@@ -1,0 +1,126 @@
+﻿Running Gradle task 'assembleDebug'...                          
+flutter : warning: 
+[options] source value 
+8 is obsolete and will 
+be removed in a future 
+release
+At line:1 char:1
++ flutter build apk 
+--debug 2>&1 | 
+Out-File -FilePath 
+"build_output.txt ...
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (warning: [opt   
+ io... future relea    
+se:String) [], Rem    
+oteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+warning: [options] 
+target value 8 is 
+obsolete and will be 
+removed in a future 
+release
+warning: [options] To 
+suppress warnings 
+about obsolete 
+options, use 
+-Xlint:-options.
+3 warnings
+warning: [options] 
+source value 8 is 
+obsolete and will be 
+removed in a future 
+release
+warning: [options] 
+target value 8 is 
+obsolete and will be 
+removed in a future 
+release
+warning: [options] To 
+suppress warnings 
+about obsolete 
+options, use 
+-Xlint:-options.
+C:\Users\Hitansh Gogri\
+AppData\Local\Pub\Cache
+\hosted\pub.dev\nearby_
+connections-4.3.0\andro
+id\src\main\java\com\pk
+mnapps\nearby_connectio
+ns\NearbyConnectionsPlu
+gin.java:274: warning: 
+[deprecation] getAuthen
+ticationToken() in 
+ConnectionInfo has 
+been deprecated
+			args.put("authentica
+tionToken", connectionI
+nfo.getAuthenticationTo
+ken());
+			                    
+                       
+   ^
+C:\Users\Hitansh Gogri\
+AppData\Local\Pub\Cache
+\hosted\pub.dev\nearby_
+connections-4.3.0\andro
+id\src\main\java\com\pk
+mnapps\nearby_connectio
+ns\NearbyConnectionsPlu
+gin.java:326: warning: 
+[deprecation] getAuthen
+ticationToken() in 
+ConnectionInfo has 
+been deprecated
+			args.put("authentica
+tionToken", connectionI
+nfo.getAuthenticationTo
+ken());
+			                    
+                       
+   ^
+C:\Users\Hitansh Gogri\
+AppData\Local\Pub\Cache
+\hosted\pub.dev\nearby_
+connections-4.3.0\andro
+id\src\main\java\com\pk
+mnapps\nearby_connectio
+ns\NearbyConnectionsPlu
+gin.java:389: warning: 
+[deprecation] 
+asJavaFile() in com.goo
+gle.android.gms.nearby.
+connection.Payload.File
+ has been deprecated
+					
+args.put("filePath", pa
+yload.asFile().asJavaFi
+le().getAbsolutePath())
+;
+					                  
+                   ^
+6 warnings
+warning: [options] 
+source value 8 is 
+obsolete and will be 
+removed in a future 
+release
+warning: [options] 
+target value 8 is 
+obsolete and will be 
+removed in a future 
+release
+warning: [options] To 
+suppress warnings 
+about obsolete 
+options, use 
+-Xlint:-options.
+3 warnings
+Running Gradle task 'assembleDebug'...                            254.9s
+ΓêÜ Built build\app\outputs\flutter-apk\app-debug.apk

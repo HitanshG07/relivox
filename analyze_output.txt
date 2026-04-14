@@ -1,0 +1,36 @@
+﻿Analyzing Relivoox...                                           
+
+warning - The URI 'package:flutter_lints/flutter.yaml' included in 'C:\sem 6\Relivoox\analysis_options.yaml' can't be found when analyzing 'C:\sem 6\Relivoox' - analysis_options.yaml:10:10 - include_file_not_found
+warning - The value of the field '_aesGcm' isn't used - lib\services\encryption_service.dart:9:9 - unused_field
+warning - The value of the local variable 'myKeyPair' isn't used - lib\services\encryption_service.dart:60:11 - unused_local_variable
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\ui\screens\chat_screen.dart:118:56 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\ui\screens\chat_screen.dart:131:34 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\ui\screens\home_screen.dart:31:43 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\ui\screens\home_screen.dart:214:38 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\ui\screens\home_screen.dart:222:40 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\ui\screens\home_screen.dart:255:44 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\ui\screens\home_screen.dart:256:39 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\ui\screens\home_screen.dart:286:69 - deprecated_member_use
+warning - Unused import: 'package:relivox/main.dart' - test\widget_test.dart:2:8 - unused_import
+warning - Unused import: 'package:relivox/services/identity_service.dart' - test\widget_test.dart:3:8 - unused_import
+warning - Unused import: 'package:relivox/services/database_service.dart' - test\widget_test.dart:4:8 - unused_import
+warning - Unused import: 'package:relivox/services/communication_service.dart' - test\widget_test.dart:5:8 - unused_import
+
+flutter : 15 issues 
+found. (ran in 4.5s)
+At line:1 char:1
++ flutter analyze 2>&1 
+| Out-File -FilePath 
+"analyze_output.txt" 
+-Encod ...
++ ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (15 issues fou   
+ nd. (ran in 4.5s):    
+String) [], Remote    
+Exception
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
