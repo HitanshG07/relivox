@@ -101,7 +101,9 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
 
       // Only show messages involving this peer
       return m.senderId == peerDeviceId || m.receiverId == peerDeviceId;
-    }).toList();
+    })
+    .take(100)
+    .toList();
     emit(state.copyWith(messages: msgs, isLoading: false));
   }
 

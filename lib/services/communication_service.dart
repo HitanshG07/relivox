@@ -401,7 +401,7 @@ class CommunicationService {
           _deviceEndpoints[displayName]!.add(eid);
         }
         
-        _log.i('Device discovered: $displayName ($eid) | ID: $incomingDeviceId. Requesting connection...');
+        _log.i('Device discovered: $displayName ($eid) | ID: $incomingDeviceId.');
         
         final peer = Peer(
           endpointId: eid,
@@ -410,8 +410,6 @@ class CommunicationService {
           lastSeen: DateTime.now().toUtc().toIso8601String(),
         );
         _eventController.add(PeerDiscoveredEvent(peer));
-
-        await _requestConnection(eid);
         break;
 
       case 'onConnectionInitiated':
@@ -436,9 +434,18 @@ class CommunicationService {
           _log.i('Connected to $eid (Bug 1 Step 3)');
           _eventController.add(PeerConnectedEvent(eid));
         } else {
-          // Clear connecting state so user can retry
           if (name != null) _connectingDevices.remove(name);
           _eventController.add(PeerFailedEvent(eid, code));
+          // Retry once after 4s — handles Nearby radio init delay on device restart
+          final retryName = name;
+          Future.delayed(const Duration(seconds: 4), () async {
+            if (retryName != null &&
+                _deviceEndpoints.containsKey(retryName) &&
+                !_connectedDevices.contains(retryName)) {
+              _log.w('[RETRY] Retrying connection to $retryName after code $code');
+              await _requestConnection(eid);
+            }
+          });
         }
         break;
 

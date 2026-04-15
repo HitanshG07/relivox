@@ -88,7 +88,13 @@ class GossipManager {
   /// Registered a newly connected device and flushes queue immediately.
   void onEndpointConnected(String endpointId) {
     _connectedEndpoints.add(endpointId);
-    _retryPendingMessages();
+    // Wait 3s for Nearby radio to stabilise before flushing pending messages
+    Future.delayed(const Duration(seconds: 3), () {
+      if (_connectedEndpoints.contains(endpointId)) {
+        debugPrint('[GossipManager] Delayed flush triggered for $endpointId');
+        _retryPendingMessages();
+      }
+    });
   }
 
   /// Removes a disconnected device from management.
