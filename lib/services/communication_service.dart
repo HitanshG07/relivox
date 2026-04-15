@@ -522,10 +522,10 @@ class CommunicationService {
     );
 
     final myId = _identity.deviceId;
+    final isBroadcast =
+        processedMessage.receiverId == Message.broadcastId;
     final isFinalReceiver =
-        processedMessage.receiverId == myId ||
-        processedMessage.receiverId == Message.broadcastId ||
-        processedMessage.receiverId.isEmpty;
+        processedMessage.receiverId == myId || isBroadcast;
 
     if (!isFinalReceiver && processedMessage.ttl <= 0) return;
 
@@ -553,7 +553,8 @@ class CommunicationService {
     }
 
     if (processedMessage.ttl <= 0) return;
-    await NotificationService().show(processedMessage);
+    // Relay silently — relay nodes must NOT show notifications
+    // for messages addressed to other devices
     debugPrint('MESH RELAY: ${processedMessage.id} | Recipients: ${_connectedEndpoints.length} peers connected');
     await _gossip.relay(processedMessage, eid);
   }
