@@ -8,6 +8,7 @@ import '../../models/peer.dart';
 import 'chat_screen.dart';
 import 'settings_screen.dart';
 import 'chats_screen.dart';
+import '../../services/database_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -163,13 +164,21 @@ class _EmergencyBanner extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'BROADCAST ALERT from ${msg.senderId.substring(msg.senderId.length - 4)}',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    FutureBuilder<String?>(
+                      future: DatabaseService().getDisplayName(msg.senderId),
+                      builder: (context, snapshot) {
+                        final name = (snapshot.data != null && snapshot.data!.isNotEmpty)
+                            ? snapshot.data!
+                            : msg.senderId.substring(msg.senderId.length - 4).toUpperCase();
+                        return Text(
+                          'BROADCAST ALERT from $name',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -518,12 +527,20 @@ class BroadcastLogScreen extends StatelessWidget {
                           const Icon(Icons.campaign,
                               color: Colors.redAccent, size: 16),
                           const SizedBox(width: 6),
-                          Text(
-                            'FROM: ${msg.senderId.substring(msg.senderId.length - 6).toUpperCase()}',
-                            style: const TextStyle(
-                                color: Colors.redAccent,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold),
+                          FutureBuilder<String?>(
+                            future: DatabaseService().getDisplayName(msg.senderId),
+                            builder: (context, snapshot) {
+                              final name = (snapshot.data != null && snapshot.data!.isNotEmpty)
+                                  ? snapshot.data!
+                                  : msg.senderId.substring(msg.senderId.length - 6).toUpperCase();
+                              return Text(
+                                'FROM: $name',
+                                style: const TextStyle(
+                                    color: Colors.redAccent,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold),
+                              );
+                            },
                           ),
                           const Spacer(),
                           Text(timeStr,
