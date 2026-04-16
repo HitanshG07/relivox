@@ -98,7 +98,10 @@ class _ChatTile extends StatelessWidget {
           ),
         ),
         title: Text(
-          summary.peerName,
+          (summary.peerName.isNotEmpty &&
+           !summary.peerName.startsWith('Device-'))
+              ? summary.peerName
+              : 'Unknown User',
           style: const TextStyle(
               color: Colors.white, fontWeight: FontWeight.bold),
         ),

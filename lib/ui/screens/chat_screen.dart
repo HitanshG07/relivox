@@ -33,8 +33,13 @@ class _ChatScreenState extends State<ChatScreen> {
           backgroundColor: const Color(0xFF0D0D1A),
           appBar: AppBar(
             backgroundColor: const Color(0xFF13132B),
-            title: Text(widget.targetPeer.displayName,
-                style: const TextStyle(color: Colors.white)),
+            title: Text(
+              (widget.targetPeer.displayName.isNotEmpty &&
+               !widget.targetPeer.displayName.startsWith('Device-'))
+                  ? widget.targetPeer.displayName
+                  : 'Unknown User',
+              style: const TextStyle(color: Colors.white),
+            ),
             iconTheme: const IconThemeData(color: Colors.white70),
           ),
           body: Column(
