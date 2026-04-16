@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../models/peer.dart';
@@ -283,6 +284,21 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
   }
 
   Future<void> _onManualRefresh(ManualRefreshEvent e, Emitter<DiscoveryState> emit) async {
+    // Check if any peers are currently connected
+    final hasActiveConnections = state.peers.any(
+      (p) => p.status == PeerStatus.connected,
+    );
+
+    if (hasActiveConnections) {
+      // SAFE PATH: connections are live — only sync the peer list from
+      // the service layer, do NOT touch Nearby advertising/discovery.
+      debugPrint('[ManualRefresh] Active connections present — soft refresh only');
+      add(RefreshPeersEvent());
+      return;
+    }
+
+    // FULL PATH: no active connections — safe to do a full Nearby restart
+    debugPrint('[ManualRefresh] No active connections — full restart allowed');
     await _comm.forceRefresh();
   }
 
