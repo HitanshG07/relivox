@@ -282,7 +282,11 @@ class CommunicationService {
 
   Future<void> connectToDevice(String name) async {
     if (_connectedDevices.contains(name)) return;
-    // Clear any stuck connecting state before retrying
+    // Wait for any in-progress restart to settle so
+    // _exposedIdForName contains the fresh endpointId.
+    await Future.delayed(const Duration(milliseconds: 600));
+    // Check again after delay — might have connected during wait.
+    if (_connectedDevices.contains(name)) return;
     _connectingDevices.remove(name);
     final endpointId = _exposedIdForName[name];
     if (endpointId == null) return;
@@ -438,16 +442,11 @@ class CommunicationService {
         } else {
           if (name != null) _connectingDevices.remove(name);
           _eventController.add(PeerFailedEvent(eid, code));
-          // Retry once after 4s — handles Nearby radio init delay on device restart
-          final retryName = name;
-          Future.delayed(const Duration(seconds: 4), () async {
-            if (retryName != null &&
-                _deviceEndpoints.containsKey(retryName) &&
-                !_connectedDevices.contains(retryName)) {
-              _log.w('[RETRY] Retrying connection to $retryName after code $code');
-              await _requestConnection(eid);
-            }
-          });
+          // Auto-retry removed — after a Nearby restart the eid changes.
+          // Retrying with a stale eid causes permanent deadlock.
+          // The user or the 5s discovery refresh will trigger a fresh connect.
+          _log.w('[CONN-FAIL] Connection to $eid (name: $name) failed '
+                 'with code $code — no auto-retry');
         }
         break;
 
