@@ -36,6 +36,10 @@ class GossipManager {
   // ACK tracking: message ID → Set of endpointIds that have acked
   final Map<String, Set<String>> _acks = {};
 
+  // Tracks which endpoints have received each broadcast emergency
+  // Key: messageId  Value: Set of endpointIds that received it
+  final Map<String, Set<String>> _broadcastEmergencyDelivered = {};
+
   Timer? _retryTimer;
 
   GossipManager({
@@ -260,13 +264,38 @@ class GossipManager {
     debugPrint('[EMERGENCY-FLUSH] Sending ${emergencies.length} broadcast '
                'emergencies to new peer $endpointId');
 
+    final List<_PendingMessage> toRemove = [];
+
     for (final pm in emergencies) {
       try {
         await _transmit(endpointId, pm.message.toWireJson());
         debugPrint('[EMERGENCY-FLUSH] ✅ ${pm.message.id} → $endpointId');
+
+        // Record this endpoint as having received this broadcast emergency
+        _broadcastEmergencyDelivered
+            .putIfAbsent(pm.message.id, () => {})
+            .add(endpointId);
+
+        // If ALL currently connected endpoints have now received it, prune it
+        final deliveredTo = _broadcastEmergencyDelivered[pm.message.id] ?? {};
+        final allDelivered = _connectedEndpoints.every(
+          (ep) => deliveredTo.contains(ep),
+        );
+        if (allDelivered) {
+          toRemove.add(pm);
+          debugPrint('[EMERGENCY-FLUSH] 🗑 ${pm.message.id} delivered to all '
+                     '${_connectedEndpoints.length} peers — pruning from queue');
+        }
       } catch (e) {
         debugPrint('[EMERGENCY-FLUSH] ❌ ${pm.message.id} → $endpointId failed: $e');
       }
+    }
+
+    // Prune fully-delivered broadcast emergencies from queue and DB
+    for (final pm in toRemove) {
+      _pendingQueue.remove(pm);
+      _broadcastEmergencyDelivered.remove(pm.message.id);
+      DatabaseService().removePendingMessage(pm.message.id);
     }
   }
 
