@@ -9,6 +9,8 @@ import 'chat_screen.dart';
 import 'settings_screen.dart';
 import 'chats_screen.dart';
 import '../../services/database_service.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -181,14 +183,68 @@ class _EmergencyBanner extends StatelessWidget {
                       },
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      msg.payload,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                    Builder(builder: (context) {
+                      // Split payload: clean text above, geo URI below
+                      final geoMatch =
+                          RegExp(r'geo:[^\s]+').firstMatch(msg.payload);
+                      final cleanText = msg.payload
+                          .replaceAll(
+                              RegExp(r'\nTap to open offline map:\ngeo:[^\s]+'),
+                              '')
+                          .trim();
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            cleanText,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          if (geoMatch != null) ...[
+                            const SizedBox(height: 8),
+                            GestureDetector(
+                              onTap: () async {
+                                final uri =
+                                    Uri.parse(geoMatch.group(0)!);
+                                if (await canLaunchUrl(uri)) {
+                                  launchUrl(uri);
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.white
+                                      .withValues(alpha: 0.15),
+                                  borderRadius:
+                                      BorderRadius.circular(8),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.map,
+                                        color: Colors.white,
+                                        size: 16),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      '📍 Open Offline Map',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      );
+                    }),
+
                   ],
                 ),
               ),
@@ -248,9 +304,13 @@ class _BroadcastTrigger extends StatelessWidget {
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
-                  // Step 2 — show message dialog with chosen type
-                  _showMessageDialog(context, code, '$emoji $label');
+                  // Microtask ensures bottom sheet is fully dismissed
+                  // before the dialog tries to mount on the navigator stack
+                  Future.microtask(
+                    () => _showMessageDialog(context, code, '$emoji $label'),
+                  );
                 },
+
               );
             }),
           ],
@@ -614,9 +674,64 @@ class BroadcastLogScreen extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      Text(msg.payload,
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 14)),
+                      Builder(builder: (context) {
+                        final geoMatch =
+                            RegExp(r'geo:[^\s]+').firstMatch(msg.payload);
+                        final cleanText = msg.payload
+                            .replaceAll(
+                                RegExp(r'\nTap to open offline map:\ngeo:[^\s]+'),
+                                '')
+                            .trim();
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              cleanText,
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 14),
+                            ),
+                            if (geoMatch != null) ...[
+                              const SizedBox(height: 8),
+                              GestureDetector(
+                                onTap: () async {
+                                  final uri =
+                                      Uri.parse(geoMatch.group(0)!);
+                                  if (await canLaunchUrl(uri)) {
+                                    launchUrl(uri);
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.redAccent
+                                        .withValues(alpha: 0.2),
+                                    borderRadius:
+                                        BorderRadius.circular(8),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.map,
+                                          color: Colors.redAccent,
+                                          size: 16),
+                                      SizedBox(width: 6),
+                                      Text(
+                                        '📍 Open Offline Map',
+                                        style: TextStyle(
+                                            color: Colors.redAccent,
+                                            fontSize: 13),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        );
+                      }),
+
                     ],
                   ),
                 );
