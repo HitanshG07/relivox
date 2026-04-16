@@ -429,9 +429,11 @@ class CommunicationService {
           if (name != null) _connectedDevices.add(name);
           _connectedEndpoints.add(eid);
           _gossip.onEndpointConnected(eid);
-          _gossip.flush();
-          debugPrint('[FLUSH-TRACE] Flush triggered after connection established with $eid');
-          _log.i('Connected to $eid (Bug 1 Step 3)');
+          // Flush is now handled by the 3s delayed call inside
+          // onEndpointConnected — removing instant flush here
+          // to prevent it from racing the radio init window
+          debugPrint('[FLUSH-TRACE] Delayed flush scheduled for $eid (3s)');
+          _log.i('Connected to $eid');
           _eventController.add(PeerConnectedEvent(eid));
         } else {
           if (name != null) _connectingDevices.remove(name);
