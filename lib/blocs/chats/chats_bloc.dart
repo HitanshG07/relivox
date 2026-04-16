@@ -117,11 +117,18 @@ class ChatsBloc extends Bloc<ChatsEvent, ChatsState> {
           b.parsedTimestamp.compareTo(a.parsedTimestamp));
       final latest = msgs.first;
 
-      // Derive display name: prefer cached name, fall back to short ID
-      final name = _nameCache[peerId] ??
-          (peerId.length >= 6
-              ? 'Device-${peerId.substring(peerId.length - 6).toUpperCase()}'
-              : peerId);
+      // Name resolution — three levels, first non-null wins:
+      // 1. Live in-memory cache (populated by discovery this session)
+      // 2. known_peers table in SQLite (survives app restarts — Fix 8)
+      // 3. Empty string → UI shows "Unknown User" via Fix 4 filter
+      String name = _nameCache[peerId] ?? '';
+      if (name.isEmpty) {
+        final stored = await _db.getDisplayName(peerId);
+        if (stored != null && stored.isNotEmpty) {
+          name = stored;
+          _nameCache[peerId] = stored; // warm the cache for this session
+        }
+      }
 
       result.add(ChatSummary(
         peerId: peerId,
