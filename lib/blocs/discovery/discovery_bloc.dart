@@ -259,19 +259,21 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
   Future<void> _onRefreshPeers(RefreshPeersEvent e, Emitter<DiscoveryState> emit) async {
     final currentPeers = _comm.getCurrentPeers();
     final syncList = <Peer>[];
+    
     for (var svcPeer in currentPeers) {
       // Match by deviceId first, then fall back to displayName
       final existing = state.peers.where((p) =>
         (svcPeer.deviceId != null && p.deviceId == svcPeer.deviceId) ||
         p.displayName == svcPeer.displayName
       );
+      
       if (existing.isNotEmpty) {
         final existingPeer = existing.first;
-        // Only overwrite endpointId if service has a non-empty value.
-        // Preserve BLoC's known-good eid when service returns '' or stale.
+        // FIX 14: Amnesia Guard - Preserve known-good eid if service returns empty
         final freshEid = svcPeer.endpointId.isNotEmpty
             ? svcPeer.endpointId
             : existingPeer.endpointId;
+            
         syncList.add(existingPeer.copyWith(
           endpointId: freshEid,
           displayName: svcPeer.displayName,
@@ -281,7 +283,7 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
       }
     }
 
-    // Preserve connected peers
+    // Preserve connected peers not currently returned by the scanner
     for (var statePeer in state.peers) {
       if (statePeer.status == PeerStatus.connected) {
         final alreadyIn = syncList.any((p) =>
@@ -292,15 +294,13 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
       }
     }
 
-    // Deduplicate by deviceId, then displayName as fallback
+    // Deduplicate by deviceId, then displayName
     final seen = <String>{};
     final deduped = syncList.where((p) =>
       seen.add(p.deviceId ?? p.displayName)
     ).toList();
 
-    // Final pass: re-apply connected status from BLoC state.
-    // Prevents 5s refresh timer from flickering green tiles back
-    // to grey if the service layer momentarily returns 'discovered'.
+    // FIX 15: Status Anchor - Forcefully retain connected status to stop UI flicker
     final connectedNames = state.peers
         .where((p) => p.status == PeerStatus.connected)
         .map((p) => p.deviceId ?? p.displayName)
