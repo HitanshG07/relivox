@@ -461,8 +461,15 @@ class CommunicationService {
         }
         _gossip.onEndpointDisconnected(eid);
         _eventController.add(PeerDisconnectedEvent(eid));
-        _log.i('Disconnected from $eid. Restarting (Bug 3)...');
-        _restartDiscoveryAndAdvertising();
+        // Only restart when ALL connections are gone.
+        // Restarting while other peers are still connected
+        // kills those active connections.
+        if (_connectedEndpoints.isEmpty) {
+          _log.i('Disconnected from $eid — no peers left. Restarting.');
+          _restartDiscoveryAndAdvertising();
+        } else {
+          _log.i('Disconnected from $eid — ${_connectedEndpoints.length} peers still active, skip restart.');
+        }
         break;
 
       case 'onPayloadReceived':
