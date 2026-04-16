@@ -89,11 +89,14 @@ class GossipManager {
   void onEndpointConnected(String endpointId) {
     _connectedEndpoints.add(endpointId);
     // Wait 3s for Nearby radio to stabilise before flushing pending messages
-    Future.delayed(const Duration(seconds: 3), () {
-      if (_connectedEndpoints.contains(endpointId)) {
-        debugPrint('[GossipManager] Delayed flush triggered for $endpointId');
-        _retryPendingMessages();
-      }
+    Future.delayed(const Duration(seconds: 3), () async {
+      if (!_connectedEndpoints.contains(endpointId)) return;
+      debugPrint('[GossipManager] Delayed flush triggered for $endpointId');
+      // 1. Normal pending queue flush (existing behaviour)
+      _retryPendingMessages();
+      // 2. Specifically flush unacknowledged broadcast emergencies
+      //    to this newly connected peer so it never misses an emergency.
+      await _flushBroadcastEmergenciesToEndpoint(endpointId);
     });
   }
 
@@ -137,6 +140,15 @@ class GossipManager {
     if (_connectedEndpoints.isEmpty) {
       _storeForLater(message);
       return;
+    }
+
+    // 4b. Broadcast emergency: ALWAYS store for late-joining peers,
+    // regardless of whether endpoints are connected right now.
+    final isBroadcastEmergency =
+        message.type.isEmergency &&
+        message.receiverId == Message.broadcastId;
+    if (isBroadcastEmergency) {
+      _storeForLater(message);
     }
 
     // 5. Transmission
@@ -230,6 +242,31 @@ class GossipManager {
       _pendingQueue.remove(sent);
       DatabaseService().removePendingMessage(sent.message.id);
       debugPrint('[FLUSH-TRACE] ${sent.message.id} → 🗑 removed from queue after broadcast');
+    }
+  }
+
+  /// Re-sends all stored broadcast emergency messages that have NOT been
+  /// acknowledged yet to a single newly connected [endpointId].
+  /// Called only from onEndpointConnected — normal text messages are
+  /// NOT affected.
+  Future<void> _flushBroadcastEmergenciesToEndpoint(String endpointId) async {
+    final emergencies = _pendingQueue.where((pm) =>
+      pm.message.type.isEmergency &&
+      pm.message.receiverId == Message.broadcastId
+    ).toList();
+
+    if (emergencies.isEmpty) return;
+
+    debugPrint('[EMERGENCY-FLUSH] Sending ${emergencies.length} broadcast '
+               'emergencies to new peer $endpointId');
+
+    for (final pm in emergencies) {
+      try {
+        await _transmit(endpointId, pm.message.toWireJson());
+        debugPrint('[EMERGENCY-FLUSH] ✅ ${pm.message.id} → $endpointId');
+      } catch (e) {
+        debugPrint('[EMERGENCY-FLUSH] ❌ ${pm.message.id} → $endpointId failed: $e');
+      }
     }
   }
 
