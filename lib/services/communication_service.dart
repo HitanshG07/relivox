@@ -63,6 +63,17 @@ class AckReceivedEvent extends P2PEvent {
   AckReceivedEvent(this.ackedMessageId, this.fromEndpointId);
 }
 
+class AdvertisementEmergencyEvent extends P2PEvent {
+  final String displayName;
+  final String deviceId;
+  final String shortId;
+  AdvertisementEmergencyEvent({
+    required this.displayName,
+    required this.deviceId,
+    required this.shortId,
+  });
+}
+
 
 /// The central Dart service that talks to NearbyPlugin.kt via MethodChannel.
 class CommunicationService {
@@ -128,6 +139,9 @@ class CommunicationService {
   bool _isAdvertising = false;
   bool _isDiscovering = false;
   bool _isRunning = false;
+
+  String? _activeEmergencyMarker; // e.g. "|EMG:a3f9"
+  Timer? _emergencyMarkerTimer;
 
   final Map<String, Set<String>> _deviceEndpoints = {};
   final Set<String> _seenMessageIds = {};
@@ -335,6 +349,13 @@ class CommunicationService {
     await _db.upsertMessage(message);
     _eventController.add(MessageReceivedEvent(message, 'local'));
     await _gossip.send(message);
+
+    // If this is a broadcast emergency, also embed the marker in
+    // the advertisement so non-connected nearby peers can receive it.
+    if (type == MessageType.emergency &&
+        receiverId == Message.broadcastId) {
+      _activateEmergencyMarker(message.id);
+    }
   }
 
   Future<void> broadcastMessage(Message message) async {
@@ -356,14 +377,31 @@ class CommunicationService {
         
         final parts = rawName.split('|');
         final displayName = parts[0];
-        final incomingDeviceId = parts.length > 1 ? parts[1] : null;
+        // parts[1] is deviceId, parts[2] (if present) may be EMG marker
+        final incomingDeviceId = parts.length > 1
+            ? (parts[1].startsWith('EMG:') ? null : parts[1])
+            : null;
+        final emgPart = parts.firstWhere(
+            (p) => p.startsWith('EMG:'), orElse: () => '');
+        final emergencyShortId = emgPart.isNotEmpty
+            ? emgPart.substring(4)
+            : null;
 
-        // Persist the human username ↔ deviceId mapping so it
-        // survives app restarts. Safe to call every time — upsert
-        // overwrites with the latest name.
+        // Persist the human username ↔ deviceId mapping
         if (incomingDeviceId != null && displayName.isNotEmpty &&
             !displayName.startsWith('Device-')) {
           _db.upsertKnownPeer(incomingDeviceId, displayName);
+        }
+
+        // If advertiser has an active emergency marker, fire the alert
+        // immediately — no connection required
+        if (emergencyShortId != null && emergencyShortId.isNotEmpty) {
+          _log.i('[EMG-ADV] Emergency marker detected from $displayName: $emergencyShortId');
+          _eventController.add(AdvertisementEmergencyEvent(
+            displayName: displayName,
+            deviceId: incomingDeviceId ?? eid,
+            shortId: emergencyShortId,
+          ));
         }
 
         // If this deviceId is known, clear its stale state
@@ -587,8 +625,42 @@ class CommunicationService {
     await _restartDiscoveryAndAdvertising();
   }
 
+  /// Restarts advertising with an |EMG:xxxx suffix embedded in the
+  /// endpointName so nearby non-connected devices can detect the alert.
+  /// Automatically clears after 5 minutes.
+  Future<void> _activateEmergencyMarker(String messageId) async {
+    final shortId = messageId.length >= 4
+        ? messageId.substring(0, 4)
+        : messageId;
+    _activeEmergencyMarker = '|EMG:$shortId';
+
+    final combinedName =
+        '${_identity.displayName}|${_identity.deviceId}$_activeEmergencyMarker';
+    try {
+      await _kChannel.invokeMethod('stopAdvertising');
+      await _kChannel.invokeMethod('startAdvertising', {'userName': combinedName});
+      _log.i('[EMG-ADV] Emergency marker activated: $combinedName');
+    } catch (e) {
+      _log.e('[EMG-ADV] Failed to restart advertising with marker: $e');
+    }
+
+    _emergencyMarkerTimer?.cancel();
+    _emergencyMarkerTimer = Timer(const Duration(minutes: 5), () async {
+      _activeEmergencyMarker = null;
+      final normalName = '${_identity.displayName}|${_identity.deviceId}';
+      try {
+        await _kChannel.invokeMethod('stopAdvertising');
+        await _kChannel.invokeMethod('startAdvertising', {'userName': normalName});
+        _log.i('[EMG-ADV] Emergency marker cleared, advertising normally');
+      } catch (e) {
+        _log.e('[EMG-ADV] Failed to clear emergency marker: $e');
+      }
+    });
+  }
+
   void dispose() {
     stopCleanupTimer();
+    _emergencyMarkerTimer?.cancel();
     _gossip.dispose();
     _eventController.close();
   }
