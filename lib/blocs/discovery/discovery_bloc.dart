@@ -158,7 +158,7 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
           type: MessageType.emergency,
           senderId: event.deviceId,
           receiverId: Message.broadcastId,
-          payload: '⚠️ EMERGENCY from ${event.displayName}',
+          payload: '📡 ${event.displayName} has sent a BROADCAST EMERGENCY. Connect to receive the full message.',
           timestamp: DateTime.now().toUtc().toIso8601String(),
           ttl: 0,
           hops: 0,
