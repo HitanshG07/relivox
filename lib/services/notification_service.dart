@@ -8,6 +8,7 @@ class NotificationService {
   static final NotificationService _instance =
       NotificationService._internal();
   factory NotificationService() => _instance;
+  static NotificationService get instance => _instance;
   NotificationService._internal();
 
   final FlutterLocalNotificationsPlugin _plugin =
@@ -126,6 +127,38 @@ class NotificationService {
       message.id.hashCode,
       '🚨 EMERGENCY ALERT',
       message.content,
+      NotificationDetails(android: androidDetails),
+    );
+  }
+
+  /// Manually show an emergency notification with custom title and body.
+  Future<void> showEmergency({
+    required String title,
+    required String body,
+  }) async {
+    if (!SettingsService().enableNotifications ||
+        !SettingsService().enableEmergencyAlerts) return;
+
+    final androidDetails = AndroidNotificationDetails(
+      'relivox_emergency',
+      'Emergency Alerts',
+      channelDescription: 'Emergency Relivox alerts',
+      importance: Importance.max,
+      priority: Priority.max,
+      playSound: true,
+      enableVibration: true,
+      vibrationPattern: Int64List.fromList([0, 500, 200, 500, 200, 500]),
+      color: const Color(0xFFFF0000),
+      ledColor: const Color(0xFFFF0000),
+      ledOnMs: 1000,
+      ledOffMs: 500,
+      fullScreenIntent: true,
+    );
+
+    await _plugin.show(
+      title.hashCode.abs(),
+      title,
+      body,
       NotificationDetails(android: androidDetails),
     );
   }

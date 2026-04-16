@@ -5,6 +5,7 @@ import 'package:equatable/equatable.dart';
 import '../../models/peer.dart';
 import '../../models/message.dart';
 import '../../services/communication_service.dart';
+import '../../services/notification_service.dart';
 
 // ── Events ───────────────────────────────────────────────────────────────────
 
@@ -327,6 +328,11 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
       latestBroadcastEmergency: e.message,
       broadcastEmergencyLog: [...state.broadcastEmergencyLog, e.message],
     ));
+
+    NotificationService.instance.showEmergency(
+      title: 'BROADCAST EMERGENCY',
+      body: e.message.payload,
+    );
   }
 
   void _onClearEmergency(ClearBroadcastEmergencyEvent e, Emitter<DiscoveryState> emit) {
