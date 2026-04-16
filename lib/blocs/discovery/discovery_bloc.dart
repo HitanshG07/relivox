@@ -266,10 +266,15 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
         p.displayName == svcPeer.displayName
       );
       if (existing.isNotEmpty) {
-        // Update existing peer with new name + endpointId
-        syncList.add(existing.first.copyWith(
-          endpointId: svcPeer.endpointId,
-          displayName: svcPeer.displayName, // picks up new name
+        final existingPeer = existing.first;
+        // Only overwrite endpointId if service has a non-empty value.
+        // Preserve BLoC's known-good eid when service returns '' or stale.
+        final freshEid = svcPeer.endpointId.isNotEmpty
+            ? svcPeer.endpointId
+            : existingPeer.endpointId;
+        syncList.add(existingPeer.copyWith(
+          endpointId: freshEid,
+          displayName: svcPeer.displayName,
         ));
       } else {
         syncList.add(svcPeer);
