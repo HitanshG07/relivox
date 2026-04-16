@@ -446,10 +446,12 @@ class CommunicationService {
 
         if (!_deviceEndpoints.containsKey(displayName)) {
           _deviceEndpoints[displayName] = {eid};
-          _exposedIdForName[displayName] = eid;
         } else {
           _deviceEndpoints[displayName]!.add(eid);
         }
+        // ALWAYS update exposedIdForName so connectToDevice()
+        // always has the freshest endpointId after a Nearby restart
+        _exposedIdForName[displayName] = eid;
         
         _log.i('Device discovered: $displayName ($eid) | ID: $incomingDeviceId.');
         
@@ -486,7 +488,19 @@ class CommunicationService {
           _log.i('Connected to $eid');
           _eventController.add(PeerConnectedEvent(eid));
         } else {
-          if (name != null) _connectingDevices.remove(name);
+          // Remove from connecting regardless of whether name is known.
+          // This prevents the "stuck spinner" when name lookup fails.
+          if (name != null) {
+            _connectingDevices.remove(name);
+          } else {
+            // name unknown — scan all connecting devices and clear any
+            // that match this endpointId via _exposedIdForName
+            final staleName = _exposedIdForName.entries
+                .where((e) => e.value == eid)
+                .map((e) => e.key)
+                .firstOrNull;
+            if (staleName != null) _connectingDevices.remove(staleName);
+          }
           _eventController.add(PeerFailedEvent(eid, code));
           // Auto-retry removed — after a Nearby restart the eid changes.
           // Retrying with a stale eid causes permanent deadlock.
@@ -503,6 +517,12 @@ class CommunicationService {
         if (name != null) {
           _connectedDevices.remove(name);
           _connectingDevices.remove(name);
+          // Remove stale exposedId so connectToDevice() cannot fire
+          // a request with this dead eid during the restart window.
+          // It will be repopulated by the next onEndpointFound.
+          if (_exposedIdForName[name] == eid) {
+            _exposedIdForName.remove(name);
+          }
         }
         _gossip.onEndpointDisconnected(eid);
         _eventController.add(PeerDisconnectedEvent(eid));
