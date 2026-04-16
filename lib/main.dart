@@ -9,6 +9,7 @@ import 'services/notification_service.dart';
 import 'blocs/discovery/discovery_bloc.dart';
 import 'blocs/settings/settings_bloc.dart';
 import 'ui/screens/splash_screen.dart';
+import 'blocs/chats/chats_bloc.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,6 +64,13 @@ class RelivoxApp extends StatelessWidget {
           ),
           BlocProvider(
             create: (_) => SettingsBloc(SettingsService())..add(SettingsLoaded()),
+          ),
+          BlocProvider<ChatsBloc>(
+            create: (context) => ChatsBloc(
+              db: context.read<DatabaseService>(),
+              comm: context.read<CommunicationService>(),
+              identity: context.read<IdentityService>(),
+            ),
           ),
         ],
         child: MaterialApp(

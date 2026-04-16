@@ -170,4 +170,32 @@ class DatabaseService {
     final rows = await d.query('pending_outbound');
     return rows.map((r) => Message.fromMap(r)).toList();
   }
+
+  /// Returns the most recent non-ACK message for each unique
+  /// conversation partner. Used to build the Chats list.
+  Future<List<Message>> getConversationSummaries() async {
+    final d = await db;
+    // Get all non-ack messages ordered newest first
+    final rows = await d.query(
+      'messages',
+      where: "type != 'ack'",
+      orderBy: 'timestamp DESC',
+    );
+    final messages = rows.map((r) => Message.fromMap(r)).toList();
+
+    // Deduplicate: keep only first (newest) message per peer
+    final seen = <String>{};
+    final result = <Message>[];
+    for (final msg in messages) {
+      // faster logic: use the non-local ID
+      final key = msg.receiverId.isEmpty || msg.receiverId == '__BROADCAST__'
+          ? msg.senderId
+          : msg.receiverId;
+      if (!seen.contains(key)) {
+        seen.add(key);
+        result.add(msg);
+      }
+    }
+    return result;
+  }
 }
