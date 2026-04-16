@@ -107,6 +107,9 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
   final CommunicationService _comm;
   StreamSubscription<P2PEvent>? _sub;
 
+  // Track advertisement emergency markers to prevent duplicate alerts
+  final Set<String> _seenAdvEmergencyIds = {};
+
   DiscoveryBloc(this._comm) : super(const DiscoveryState()) {
     on<StartDiscoveryEvent>(_onStart);
     on<StopDiscoveryEvent>(_onStop);
@@ -145,6 +148,23 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
       final msg = event.message;
       if (msg.type.isEmergency && msg.receiverId == Message.broadcastId) {
         add(_IncomingBroadcastEmergency(msg));
+      }
+    } else if (event is AdvertisementEmergencyEvent) {
+      if (!_seenAdvEmergencyIds.contains(event.shortId)) {
+        _seenAdvEmergencyIds.add(event.shortId);
+        final syntheticMsg = Message(
+          id: 'adv-emg-${event.shortId}',
+          type: MessageType.emergency,
+          senderId: event.deviceId,
+          receiverId: Message.broadcastId,
+          payload: '⚠️ EMERGENCY from ${event.displayName}',
+          timestamp: DateTime.now().toUtc().toIso8601String(),
+          ttl: 0,
+          hops: 0,
+          seq: 0,
+          priority: MessagePriority.high,
+        );
+        add(_IncomingBroadcastEmergency(syntheticMsg));
       }
     }
   }
