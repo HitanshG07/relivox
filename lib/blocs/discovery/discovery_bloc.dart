@@ -294,9 +294,26 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
 
     // Deduplicate by deviceId, then displayName as fallback
     final seen = <String>{};
-    final finalPeers = syncList.where((p) =>
+    final deduped = syncList.where((p) =>
       seen.add(p.deviceId ?? p.displayName)
     ).toList();
+
+    // Final pass: re-apply connected status from BLoC state.
+    // Prevents 5s refresh timer from flickering green tiles back
+    // to grey if the service layer momentarily returns 'discovered'.
+    final connectedNames = state.peers
+        .where((p) => p.status == PeerStatus.connected)
+        .map((p) => p.deviceId ?? p.displayName)
+        .toSet();
+
+    final finalPeers = deduped.map((p) {
+      final key = p.deviceId ?? p.displayName;
+      if (connectedNames.contains(key) &&
+          p.status != PeerStatus.connected) {
+        return p.copyWith(status: PeerStatus.connected);
+      }
+      return p;
+    }).toList();
 
     emit(state.copyWith(peers: finalPeers));
   }
