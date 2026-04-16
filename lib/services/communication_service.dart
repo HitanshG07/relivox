@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:logger/logger.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
+import 'package:geolocator/geolocator.dart';
 import '../models/peer.dart';
 import '../models/message.dart';
 import '../protocols/gossip_manager.dart';
@@ -66,11 +67,15 @@ class AckReceivedEvent extends P2PEvent {
 class AdvertisementEmergencyEvent extends P2PEvent {
   final String displayName;
   final String deviceId;
-  final String shortId;
+  final String emergencyType; // FIRE | MEDC | TRAP | GEN
+  final String latitude;      // decimal string e.g. "19.0709"
+  final String longitude;     // decimal string e.g. "72.8796"
   AdvertisementEmergencyEvent({
     required this.displayName,
     required this.deviceId,
-    required this.shortId,
+    required this.emergencyType,
+    required this.latitude,
+    required this.longitude,
   });
 }
 
@@ -331,7 +336,12 @@ class CommunicationService {
 
   // ── Sending ───────────────────────────────────────────────────────────────
 
-  Future<void> sendUserMessage(String content, String receiverId, MessageType type) async {
+  Future<void> sendUserMessage(
+    String content,
+    String receiverId,
+    MessageType type, {
+    String emergencyType = 'GEN',
+  }) async {
     if (content.isEmpty) return;
     final message = Message(
       id: const Uuid().v4(),
@@ -354,7 +364,7 @@ class CommunicationService {
     // the advertisement so non-connected nearby peers can receive it.
     if (type == MessageType.emergency &&
         receiverId == Message.broadcastId) {
-      _activateEmergencyMarker(message.id);
+      _activateEmergencyMarker(message.id, type: emergencyType);
     }
   }
 
@@ -374,46 +384,71 @@ class CommunicationService {
       case 'onEndpointFound':
         final eid = args['endpointId'] as String;
         final rawName = args['endpointName'] as String? ?? eid;
-        
         final parts = rawName.split('|');
         final displayName = parts[0];
-        // parts[1] is deviceId, parts[2] (if present) may be EMG marker
-        final incomingDeviceId = parts.length > 1
-            ? (parts[1].startsWith('EMG:') ? null : parts[1])
-            : null;
+
+        // Detect format:
+        //   Emergency: "DisplayName|EMG:TYPE:Lat,Lng"
+        //   Normal:    "DisplayName|deviceId"
         final emgPart = parts.firstWhere(
             (p) => p.startsWith('EMG:'), orElse: () => '');
-        final emergencyShortId = emgPart.isNotEmpty
-            ? emgPart.substring(4)
-            : null;
 
-        // Persist the human username ↔ deviceId mapping
+        String? incomingDeviceId;
+        String? emgType;
+        String? emgLat;
+        String? emgLng;
+
+        if (emgPart.isNotEmpty) {
+          // Emergency mode — UUID dropped, GPS embedded instead
+          // Token format: EMG:TYPE:Lat,Lng
+          final emgTokens = emgPart.split(':');
+          if (emgTokens.length >= 3) {
+            emgType = emgTokens[1]; // FIRE | MEDC | TRAP | GEN
+            final coords = emgTokens[2].split(',');
+            if (coords.length >= 2) {
+              emgLat = coords[0];
+              emgLng = coords[1];
+            }
+          }
+          // incomingDeviceId stays null — UUID was not in this beacon
+        } else if (parts.length > 1 && !parts[1].startsWith('EMG:')) {
+          // Normal advertisement — parts[1] is persistent deviceId
+          incomingDeviceId = parts[1];
+        }
+
+        // Persist username ↔ deviceId (normal mode only)
         if (incomingDeviceId != null && displayName.isNotEmpty &&
             !displayName.startsWith('Device-')) {
           _db.upsertKnownPeer(incomingDeviceId, displayName);
         }
 
-        // If advertiser has an active emergency marker, fire the alert
-        // immediately — no connection required
-        if (emergencyShortId != null && emergencyShortId.isNotEmpty) {
-          _log.i('[EMG-ADV] Emergency marker detected from $displayName: $emergencyShortId');
+        // Fire geo-emergency event if all tokens parsed correctly
+        if (emgPart.isNotEmpty &&
+            emgType != null &&
+            emgLat != null &&
+            emgLng != null) {
+          _log.i('[EMG-ADV] Geo-emergency from $displayName: '
+                 '$emgType @ $emgLat,$emgLng');
           _eventController.add(AdvertisementEmergencyEvent(
             displayName: displayName,
-            deviceId: incomingDeviceId ?? eid,
-            shortId: emergencyShortId,
+            deviceId: eid, // UUID dropped during emergency — use eid
+            emergencyType: emgType,
+            latitude: emgLat,
+            longitude: emgLng,
           ));
+          // Early exit — do NOT run normal peer discovery logic
+          // for UUID-less emergency beacons (would corrupt peer map)
+          _endpointLastSeen[eid] = DateTime.now();
+          break;
         }
 
-        // If this deviceId is known, clear its stale state
-        // so reconnection is not blocked
+        // Normal flow: clear stale state for this deviceId
         if (incomingDeviceId != null) {
           final staleEndpoint = _endpointToDeviceId.entries
             .where((e) => e.value == incomingDeviceId)
             .map((e) => e.key)
             .firstOrNull;
-
           if (staleEndpoint != null && staleEndpoint != eid) {
-            // Find the OLD name associated with this endpoint to clear it
             final oldName = _endpointToName[staleEndpoint];
             if (oldName != null) {
               _connectedDevices.remove(oldName);
@@ -424,10 +459,12 @@ class CommunicationService {
           }
         }
 
-        // Remove stale old-name entry if this deviceId re-advertised with a new name
+        // Clear stale old-name if deviceId re-advertised with new name
         if (incomingDeviceId != null) {
           final oldName = _endpointToName.entries
-            .where((e) => _endpointToDeviceId[e.key] == incomingDeviceId && e.value != displayName)
+            .where((e) =>
+              _endpointToDeviceId[e.key] == incomingDeviceId &&
+              e.value != displayName)
             .map((e) => e.value)
             .firstOrNull;
           if (oldName != null) {
@@ -648,32 +685,53 @@ class CommunicationService {
   /// Restarts advertising with an |EMG:xxxx suffix embedded in the
   /// endpointName so nearby non-connected devices can detect the alert.
   /// Automatically clears after 5 minutes.
-  Future<void> _activateEmergencyMarker(String messageId) async {
-    final shortId = messageId.length >= 4
-        ? messageId.substring(0, 4)
-        : messageId;
-    _activeEmergencyMarker = '|EMG:$shortId';
+  Future<void> _activateEmergencyMarker(
+    String messageId, {
+    String type = 'GEN',
+  }) async {
+    String lat = '0.0000';
+    String lng = '0.0000';
+    try {
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.always ||
+          permission == LocationPermission.whileInUse) {
+        final pos = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.medium,
+          timeLimit: const Duration(seconds: 5),
+        );
+        // 4 decimal places = ~11m accuracy, keeps BLE name short
+        lat = pos.latitude.toStringAsFixed(4);
+        lng = pos.longitude.toStringAsFixed(4);
+      }
+    } catch (e) {
+      _log.w('[EMG-ADV] GPS unavailable — using 0.0000 fallback: $e');
+    }
 
-    final combinedName =
-        '${_identity.displayName}|${_identity.deviceId}$_activeEmergencyMarker';
+    // Format: "DisplayName|EMG:TYPE:Lat,Lng"
+    // UUID dropped during emergency to fit within BLE name limit
+    // Example: "Hitansh|EMG:FIRE:19.0709,72.8796" = 34 chars
+    _activeEmergencyMarker = '|EMG:$type:$lat,$lng';
+    final combinedName = '${_identity.displayName}$_activeEmergencyMarker';
+
     try {
       await _kChannel.invokeMethod('stopAdvertising');
       await _kChannel.invokeMethod('startAdvertising', {'userName': combinedName});
-      _log.i('[EMG-ADV] Emergency marker activated: $combinedName');
+      _log.i('[EMG-ADV] Geo-emergency marker activated: $combinedName');
     } catch (e) {
-      _log.e('[EMG-ADV] Failed to restart advertising with marker: $e');
+      _log.e('[EMG-ADV] Failed to start geo-emergency advertising: $e');
     }
 
     _emergencyMarkerTimer?.cancel();
     _emergencyMarkerTimer = Timer(const Duration(minutes: 5), () async {
       _activeEmergencyMarker = null;
+      // Restore normal advertising WITH deviceId
       final normalName = '${_identity.displayName}|${_identity.deviceId}';
       try {
         await _kChannel.invokeMethod('stopAdvertising');
         await _kChannel.invokeMethod('startAdvertising', {'userName': normalName});
-        _log.i('[EMG-ADV] Emergency marker cleared, advertising normally');
+        _log.i('[EMG-ADV] Geo-emergency marker cleared, back to normal');
       } catch (e) {
-        _log.e('[EMG-ADV] Failed to clear emergency marker: $e');
+        _log.e('[EMG-ADV] Failed to clear geo-emergency marker: $e');
       }
     });
   }

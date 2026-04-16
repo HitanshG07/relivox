@@ -151,14 +151,34 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
         add(_IncomingBroadcastEmergency(msg));
       }
     } else if (event is AdvertisementEmergencyEvent) {
-      if (!_seenAdvEmergencyIds.contains(event.shortId)) {
-        _seenAdvEmergencyIds.add(event.shortId);
+      // Dedup key = TYPE+LAT+LNG so same emergency is not
+      // shown repeatedly if BLE beacon is heard multiple times
+      final dedupKey =
+          '${event.emergencyType}-${event.latitude}-${event.longitude}';
+      if (!_seenAdvEmergencyIds.contains(dedupKey)) {
+        _seenAdvEmergencyIds.add(dedupKey);
+
+        final typeLabel = switch (event.emergencyType) {
+          'FIRE' => '🔥 FIRE EMERGENCY',
+          'MEDC' => '🚑 MEDICAL EMERGENCY',
+          'TRAP' => '🆘 TRAPPED',
+          _      => '⚠️ EMERGENCY',
+        };
+
+        // Android Geo Intent URI — opens Google Maps (offline area)
+        // or OsmAnd. Works with zero internet connection.
+        final geoUri =
+            'geo:${event.latitude},${event.longitude}'
+            '?q=${event.latitude},${event.longitude}'
+            '(${Uri.encodeComponent(event.displayName)}+Emergency)';
+
         final syntheticMsg = Message(
-          id: 'adv-emg-${event.shortId}',
+          id: 'adv-emg-$dedupKey',
           type: MessageType.emergency,
           senderId: event.deviceId,
           receiverId: Message.broadcastId,
-          payload: '📡 ${event.displayName} has sent a BROADCAST EMERGENCY. Connect to receive the full message.',
+          payload: '$typeLabel reported by ${event.displayName}.\n'
+              'Tap to open offline map:\n$geoUri',
           timestamp: DateTime.now().toUtc().toIso8601String(),
           ttl: 0,
           hops: 0,

@@ -207,41 +207,105 @@ class _EmergencyBanner extends StatelessWidget {
 class _BroadcastTrigger extends StatelessWidget {
   const _BroadcastTrigger();
 
-  void _showBroadcastDialog(BuildContext context) {
+  // Step 1 — show type selector bottom sheet
+  void _showTypeSelector(BuildContext context) {
+    final types = [
+      ('FIRE', '🔥', 'Fire / Hazard',      Colors.deepOrange),
+      ('MEDC', '🚑', 'Medical Emergency',  Colors.redAccent),
+      ('TRAP', '🆘', 'Trapped / Immobile', Colors.orange),
+      ('GEN',  '⚠️', 'General Emergency',  Colors.yellow),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF13132B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'What type of emergency?',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ...types.map((t) {
+              final (code, emoji, label, color) = t;
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Text(emoji, style: const TextStyle(fontSize: 28)),
+                title: Text(
+                  label,
+                  style: const TextStyle(color: Colors.white, fontSize: 15),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  // Step 2 — show message dialog with chosen type
+                  _showMessageDialog(context, code, '$emoji $label');
+                },
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Step 2 — show message text field with type already chosen
+  void _showMessageDialog(
+      BuildContext context, String typeCode, String typeLabel) {
     final controller = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF13132B),
-        title: const Text('📢 Broadcast Emergency', style: TextStyle(color: Colors.redAccent)),
+        title: Text(
+          typeLabel,
+          style: const TextStyle(color: Colors.redAccent),
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
           style: const TextStyle(color: Colors.white),
+          maxLines: 3,
           decoration: const InputDecoration(
-            hintText: 'Type emergency message to ALL...',
+            hintText: 'Add details (optional)...',
             hintStyle: TextStyle(color: Colors.white24),
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: Colors.white24),
+            ),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('CANCEL', style: TextStyle(color: Colors.white38)),
+            child: const Text('CANCEL',
+                style: TextStyle(color: Colors.white38)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
             onPressed: () {
-              final text = controller.text.trim();
-              if (text.isNotEmpty) {
-                context.read<CommunicationService>().sendUserMessage(
-                      text,
-                      Message.broadcastId,
-                      MessageType.emergency,
-                    );
-                Navigator.pop(ctx);
-              }
+              final text = controller.text.trim().isNotEmpty
+                  ? controller.text.trim()
+                  : typeLabel; // fallback if user types nothing
+              context.read<CommunicationService>().sendUserMessage(
+                    text,
+                    Message.broadcastId,
+                    MessageType.emergency,
+                    emergencyType: typeCode, // ← passes FIRE/MEDC/TRAP/GEN
+                  );
+              Navigator.pop(ctx);
             },
-            child: const Text('SEND TO ALL', style: TextStyle(color: Colors.white)),
+            child: const Text('SEND TO ALL',
+                style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -256,11 +320,12 @@ class _BroadcastTrigger extends StatelessWidget {
         width: double.infinity,
         height: 50,
         child: ElevatedButton.icon(
-          onPressed: () => _showBroadcastDialog(context),
+          onPressed: () => _showTypeSelector(context),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.redAccent,
             foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
           ),
           icon: const Icon(Icons.campaign),
           label: const Text('📢 SEND BROADCAST EMERGENCY',
