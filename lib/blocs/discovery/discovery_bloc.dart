@@ -186,30 +186,49 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
   }
 
   void _onConnected(_NativePeerConnected e, Emitter<DiscoveryState> emit) {
-    final peers = state.peers.map((p) {
-      // Match by endpointId OR update endpointId if deviceId matches
+    // LEVEL 1: Fast path — match by endpointId (normal case)
+    var peers = state.peers.map((p) {
       if (p.endpointId == e.endpointId) {
         return p.copyWith(status: PeerStatus.connected);
       }
       return p;
     }).toList();
 
-    // If no match found by endpointId, refresh immediately from service
-    final matched = peers.any((p) => p.status == PeerStatus.connected && p.endpointId == e.endpointId);
-    if (!matched) {
-      final fresh = _comm.getCurrentPeers();
-      final merged = fresh.map((fp) {
-        final existing = state.peers.where((p) =>
-          (fp.deviceId != null && p.deviceId == fp.deviceId) ||
-          p.displayName == fp.displayName
-        ).firstOrNull;
-        if (existing != null && fp.endpointId == e.endpointId) {
-          return fp.copyWith(status: PeerStatus.connected);
-        }
-        return fp;
-      }).toList();
-      emit(state.copyWith(peers: merged));
+    final level1Matched = peers.any(
+      (p) => p.endpointId == e.endpointId && p.status == PeerStatus.connected,
+    );
+    if (level1Matched) {
+      emit(state.copyWith(peers: peers));
       return;
+    }
+
+    // LEVEL 2 & 3: endpointId changed after a Nearby restart.
+    // Ask service for fresh peer list, then match by deviceId or displayName.
+    final fresh = _comm.getCurrentPeers();
+    final freshPeer = fresh.where((fp) => fp.endpointId == e.endpointId).firstOrNull;
+
+    if (freshPeer != null) {
+      peers = state.peers.map((p) {
+        final matchByDeviceId = freshPeer.deviceId != null &&
+                                p.deviceId != null &&
+                                p.deviceId == freshPeer.deviceId;
+        final matchByName = p.displayName == freshPeer.displayName;
+        if (matchByDeviceId || matchByName) {
+          return p.copyWith(
+            status: PeerStatus.connected,
+            endpointId: e.endpointId, // update stale endpointId
+          );
+        }
+        return p;
+      }).toList();
+
+      // LEVEL 4: No existing peer matched at all — add fresh peer directly
+      final level234Matched = peers.any(
+        (p) => p.endpointId == e.endpointId && p.status == PeerStatus.connected,
+      );
+      if (!level234Matched) {
+        peers = [...peers, freshPeer.copyWith(status: PeerStatus.connected)];
+      }
     }
 
     emit(state.copyWith(peers: peers));
