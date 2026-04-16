@@ -225,19 +225,22 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
         p.displayName == svcPeer.displayName
       );
       if (existing.isNotEmpty) {
-        // Update existing peer with new name + endpointId
-        syncList.add(existing.first.copyWith(
+        // Keep BLoC-tracked status — service always returns 'discovered', never use it
+        final existingPeer = existing.first;
+        syncList.add(existingPeer.copyWith(
           endpointId: svcPeer.endpointId,
           displayName: svcPeer.displayName, // picks up new name
+          // Do NOT take status from svcPeer — it always returns 'discovered'
         ));
       } else {
         syncList.add(svcPeer);
       }
     }
 
-    // Preserve connected peers
+    // Preserve connected AND connecting peers — do not let the 5s timer wipe them
     for (var statePeer in state.peers) {
-      if (statePeer.status == PeerStatus.connected) {
+      if (statePeer.status == PeerStatus.connected ||
+          statePeer.status == PeerStatus.connecting) {
         final alreadyIn = syncList.any((p) =>
           (p.deviceId != null && p.deviceId == statePeer.deviceId) ||
           p.displayName == statePeer.displayName
@@ -284,12 +287,25 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
 
   List<Peer> _upsertPeer(List<Peer> current, Peer peer) {
     final updated = List<Peer>.from(current);
-    final exists = updated.any((p) => p.displayName == peer.displayName);
-    if (!exists) {
+    // Match by deviceId first, fall back to displayName
+    final idx = updated.indexWhere((p) =>
+      (peer.deviceId != null && p.deviceId == peer.deviceId) ||
+      p.displayName == peer.displayName
+    );
+    if (idx == -1) {
       updated.add(peer);
     } else {
-      final idx = updated.indexWhere((p) => p.displayName == peer.displayName);
-      updated[idx] = peer;
+      final existing = updated[idx];
+      // Preserve status if already connecting or connected — never overwrite with 'discovered'
+      final shouldPreserveStatus =
+        existing.status == PeerStatus.connecting ||
+        existing.status == PeerStatus.connected;
+      updated[idx] = existing.copyWith(
+        endpointId: peer.endpointId,
+        displayName: peer.displayName,
+        deviceId: peer.deviceId ?? existing.deviceId,
+        status: shouldPreserveStatus ? existing.status : peer.status,
+      );
     }
     return updated;
   }
