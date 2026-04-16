@@ -13,7 +13,7 @@ class DatabaseService {
   DatabaseService._internal();
 
   static const _dbName = 'relivox.db';
-  static const _dbVersion = 2;
+  static const _dbVersion = 3;
   Database? _db;
 
   Future<Database> get db async {
@@ -70,6 +70,14 @@ class DatabaseService {
       )
     ''');
 
+    await db.execute('''
+      CREATE TABLE known_peers (
+        device_id    TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        last_seen    TEXT NOT NULL
+      )
+    ''');
+
     _log.i('Database schema v$version created');
   }
 
@@ -79,6 +87,17 @@ class DatabaseService {
       await db.execute("ALTER TABLE messages ADD COLUMN receiver_id TEXT NOT NULL DEFAULT ''");
       await db.execute("ALTER TABLE pending_outbound ADD COLUMN receiver_id TEXT NOT NULL DEFAULT ''");
       _log.i('Added receiver_id column to tables');
+    }
+
+    if (oldVersion < 3) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS known_peers (
+          device_id    TEXT PRIMARY KEY,
+          display_name TEXT NOT NULL,
+          last_seen    TEXT NOT NULL
+        )
+      ''');
+      _log.i('Created known_peers table (v3 migration)');
     }
   }
 
@@ -197,5 +216,54 @@ class DatabaseService {
       }
     }
     return result;
+  }
+
+  /// Same as getConversationSummaries() but resolves each
+  /// peer's Device-XXXX senderId to their stored human username.
+  /// Returns a list of maps with keys: 'message' and 'peerName'.
+  Future<List<Map<String, dynamic>>> getConversationSummariesResolved() async {
+    final summaries = await getConversationSummaries();
+    final result = <Map<String, dynamic>>[];
+    for (final msg in summaries) {
+      // The peer is whoever is NOT us — use senderId for received msgs,
+      // receiverId for sent msgs (receiverId may be broadcastId for emergency)
+      final peerId = msg.senderId;
+      final stored = await getDisplayName(peerId);
+      result.add({
+        'message': msg,
+        'peerName': stored ?? '',   // empty → UI falls back to "Unknown User"
+      });
+    }
+    return result;
+  }
+
+  /// Saves or updates a peer's human display name keyed by their deviceId.
+  /// Called every time a peer is discovered so the name stays current.
+  Future<void> upsertKnownPeer(String deviceId, String displayName) async {
+    final d = await db;
+    await d.insert(
+      'known_peers',
+      {
+        'device_id': deviceId,
+        'display_name': displayName,
+        'last_seen': DateTime.now().toUtc().toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Returns the stored human display name for a deviceId.
+  /// Returns null if the peer has never been seen before.
+  Future<String?> getDisplayName(String deviceId) async {
+    final d = await db;
+    final rows = await d.query(
+      'known_peers',
+      columns: ['display_name'],
+      where: 'device_id = ?',
+      whereArgs: [deviceId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['display_name'] as String?;
   }
 }

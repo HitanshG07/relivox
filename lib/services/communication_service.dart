@@ -358,6 +358,14 @@ class CommunicationService {
         final displayName = parts[0];
         final incomingDeviceId = parts.length > 1 ? parts[1] : null;
 
+        // Persist the human username ↔ deviceId mapping so it
+        // survives app restarts. Safe to call every time — upsert
+        // overwrites with the latest name.
+        if (incomingDeviceId != null && displayName.isNotEmpty &&
+            !displayName.startsWith('Device-')) {
+          _db.upsertKnownPeer(incomingDeviceId, displayName);
+        }
+
         // If this deviceId is known, clear its stale state
         // so reconnection is not blocked
         if (incomingDeviceId != null) {
