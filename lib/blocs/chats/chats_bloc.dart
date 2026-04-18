@@ -97,11 +97,12 @@ class ChatsBloc extends Bloc<ChatsEvent, ChatsState> {
     for (final msg in allMessages) {
       if (msg.type == MessageType.ack) continue;
       // Skip pure broadcasts with no sender context
-      if (msg.receiverId == '__BROADCAST__' && msg.senderId == myId) {
-        // outbound broadcast — group under '__BROADCAST__'
-        byPeer.putIfAbsent('__BROADCAST__', () => []).add(msg);
+      if (msg.receiverId == Message.broadcastId && msg.senderId == myId) {
+        // outbound broadcast — group under broadcastId constant
+        byPeer.putIfAbsent(Message.broadcastId, () => []).add(msg);
         continue;
       }
+
       // Determine the peer's ID
       final peerId = msg.senderId == myId ? msg.receiverId : msg.senderId;
       if (peerId.isEmpty) continue;
@@ -112,7 +113,7 @@ class ChatsBloc extends Bloc<ChatsEvent, ChatsState> {
     final List<ChatSummary> result = [];
     for (final entry in byPeer.entries) {
       final peerId = entry.key;
-      if (peerId == '__BROADCAST__') continue; // skip broadcasts in chat list
+      if (peerId == Message.broadcastId) continue; // skip broadcasts in chat list
       final msgs = entry.value..sort((a, b) =>
           b.parsedTimestamp.compareTo(a.parsedTimestamp));
       final latest = msgs.first;

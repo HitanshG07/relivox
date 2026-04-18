@@ -190,52 +190,7 @@ class DatabaseService {
     return rows.map((r) => Message.fromMap(r)).toList();
   }
 
-  /// Returns the most recent non-ACK message for each unique
-  /// conversation partner. Used to build the Chats list.
-  Future<List<Message>> getConversationSummaries() async {
-    final d = await db;
-    // Get all non-ack messages ordered newest first
-    final rows = await d.query(
-      'messages',
-      where: "type != 'ack'",
-      orderBy: 'timestamp DESC',
-    );
-    final messages = rows.map((r) => Message.fromMap(r)).toList();
 
-    // Deduplicate: keep only first (newest) message per peer
-    final seen = <String>{};
-    final result = <Message>[];
-    for (final msg in messages) {
-      // faster logic: use the non-local ID
-      final key = msg.receiverId.isEmpty || msg.receiverId == '__BROADCAST__'
-          ? msg.senderId
-          : msg.receiverId;
-      if (!seen.contains(key)) {
-        seen.add(key);
-        result.add(msg);
-      }
-    }
-    return result;
-  }
-
-  /// Same as getConversationSummaries() but resolves each
-  /// peer's Device-XXXX senderId to their stored human username.
-  /// Returns a list of maps with keys: 'message' and 'peerName'.
-  Future<List<Map<String, dynamic>>> getConversationSummariesResolved() async {
-    final summaries = await getConversationSummaries();
-    final result = <Map<String, dynamic>>[];
-    for (final msg in summaries) {
-      // The peer is whoever is NOT us — use senderId for received msgs,
-      // receiverId for sent msgs (receiverId may be broadcastId for emergency)
-      final peerId = msg.senderId;
-      final stored = await getDisplayName(peerId);
-      result.add({
-        'message': msg,
-        'peerName': stored ?? '',   // empty → UI falls back to "Unknown User"
-      });
-    }
-    return result;
-  }
 
   /// Saves or updates a peer's human display name keyed by their deviceId.
   /// Called every time a peer is discovered so the name stays current.

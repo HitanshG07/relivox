@@ -102,10 +102,8 @@ class CommunicationService {
   }
 
   CommunicationService._internal(this._identity, this._db) {
-    // Encryption init is fire-and-forget at construction;
-    // all sends are async so key is ready before first use
-    EncryptionService().init();
     _kChannel.setMethodCallHandler(_onNativeCall);
+
 
     _gossip = GossipManager(
       myDeviceId: _identity.deviceId,
@@ -405,17 +403,7 @@ class CommunicationService {
     }
   }
 
-  Future<void> broadcastMessage(Message message) async {
-    final updatedMessage = message.copyWith(
-        ttl: (message.ttl > 0) ? message.ttl - 1 : 0);
-    _gossip.markSeen(updatedMessage.id);
-    await _db.upsertMessage(updatedMessage);
-    final plainJson    = updatedMessage.toWireJson();
-    final encryptedPayload = await _enc.encrypt(plainJson);
-    _log.i('💡 [TX-TRACE] Invoking broadcastPayload for ${updatedMessage.id}');
-    await _kChannel.invokeMethod('broadcastPayload',
-        {'payload': encryptedPayload});
-  }
+
 
 
   // ── Native → Dart callbacks ───────────────────────────────────────────────
