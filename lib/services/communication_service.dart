@@ -109,11 +109,18 @@ class CommunicationService {
 
     _gossip = GossipManager(
       myDeviceId: _identity.deviceId,
-      transmit: (endpointId, payload) => _kChannel.invokeMethod('sendPayload', {
-        'endpointId': endpointId,
-        'payload': payload,
-      }),
+      transmit: (endpointId, payload) async {
+        // Encrypt at the transmit boundary so ALL gossip relay paths
+        // (send, relay, retry, flush) are encrypted automatically.
+        // GossipManager stays encryption-unaware.
+        final encrypted = await _enc.encrypt(payload);
+        await _kChannel.invokeMethod('sendPayload', {
+          'endpointId': endpointId,
+          'payload': encrypted,
+        });
+      },
     );
+
   }
 
   // All P2P events (peer lifecycle + messages) in a single stream

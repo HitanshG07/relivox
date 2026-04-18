@@ -92,17 +92,27 @@ class GossipManager {
   /// Registered a newly connected device and flushes queue immediately.
   void onEndpointConnected(String endpointId) {
     _connectedEndpoints.add(endpointId);
-    // Wait 3s for Nearby radio to stabilise before flushing pending messages
-    Future.delayed(const Duration(seconds: 3), () async {
-      if (!_connectedEndpoints.contains(endpointId)) return;
-      debugPrint('[GossipManager] Delayed flush triggered for $endpointId');
-      // 1. Normal pending queue flush (existing behaviour)
+    // Use a two-stage flush:
+    //   Stage 1 @ 3s  — covers fast devices (most modern Android)
+    //   Stage 2 @ 8s  — safety net for slow devices or congested radio
+    // Each stage checks the endpoint is still connected before flushing.
+    // This replaces the single blind 3s delay with validated retry.
+    _scheduledFlush(endpointId, const Duration(seconds: 3));
+    _scheduledFlush(endpointId, const Duration(seconds: 8));
+  }
+
+  void _scheduledFlush(String endpointId, Duration delay) {
+    Future.delayed(delay, () async {
+      if (!_connectedEndpoints.contains(endpointId)) {
+        debugPrint('[GossipManager] Flush cancelled — $endpointId disconnected');
+        return;
+      }
+      debugPrint('[GossipManager] Flush @ ${delay.inSeconds}s for $endpointId');
       _retryPendingMessages();
-      // 2. Specifically flush unacknowledged broadcast emergencies
-      //    to this newly connected peer so it never misses an emergency.
       await _flushBroadcastEmergenciesToEndpoint(endpointId);
     });
   }
+
 
   /// Removes a disconnected device from management.
   void onEndpointDisconnected(String endpointId) {
@@ -220,34 +230,48 @@ class GossipManager {
     if (_connectedEndpoints.isEmpty) return;
     if (_pendingQueue.isEmpty) return;
 
-    // Snapshot avoid concurrent modification
+    // Snapshot to avoid concurrent modification
     final snapshot = List<_PendingMessage>.from(_pendingQueue);
+    final endpointList = List<String>.from(_connectedEndpoints);
 
     final Set<_PendingMessage> toRemove = {};
-    for (final endpoint in _connectedEndpoints) {
-      debugPrint('[FLUSH-TRACE] Flushing ${_pendingQueue.length} msgs for $endpoint');
-      for (final pending in snapshot) {
-        if (pending.retryCount >= GossipManager.MAX_RETRIES) {
-          toRemove.add(pending);
-          debugPrint('[FLUSH-TRACE] ${pending.message.id} → ⛔ MAX_RETRIES exceeded, dropping');
-          continue;
-        }
+
+    for (final pending in snapshot) {
+      if (pending.retryCount >= GossipManager.MAX_RETRIES) {
+        toRemove.add(pending);
+        debugPrint('[FLUSH-TRACE] ${pending.message.id} → ⛔ MAX_RETRIES exceeded, dropping');
+        continue;
+      }
+
+      // Track per-message delivery — only remove when ALL endpoints got it
+      bool sentToAll = true;
+      for (final endpoint in endpointList) {
         try {
           await _transmit(endpoint, pending.message.toWireJson());
-          toRemove.add(pending);
           debugPrint('[FLUSH-TRACE] ${pending.message.id} → ✅ sent to $endpoint');
         } catch (e) {
-          pending.retryCount++;
-          debugPrint('[FLUSH-TRACE] ${pending.message.id} → ❌ skipped ($e) [retry ${pending.retryCount}/${GossipManager.MAX_RETRIES}]');
+          sentToAll = false;
+          debugPrint('[FLUSH-TRACE] ${pending.message.id} → ❌ failed for $endpoint: $e');
         }
       }
+
+      if (sentToAll) {
+        toRemove.add(pending);
+      } else {
+        // Partial failure — increment retry, keep in queue
+        pending.retryCount++;
+        debugPrint('[FLUSH-TRACE] ${pending.message.id} → partial failure '
+                   '[retry ${pending.retryCount}/${GossipManager.MAX_RETRIES}]');
+      }
     }
+
     for (final sent in toRemove) {
       _pendingQueue.remove(sent);
       DatabaseService().removePendingMessage(sent.message.id);
-      debugPrint('[FLUSH-TRACE] ${sent.message.id} → 🗑 removed from queue after broadcast');
+      debugPrint('[FLUSH-TRACE] ${sent.message.id} → 🗑 removed after full delivery');
     }
   }
+
 
   /// Re-sends all stored broadcast emergency messages that have NOT been
   /// acknowledged yet to a single newly connected [endpointId].
