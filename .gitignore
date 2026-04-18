@@ -12,6 +12,13 @@
 .swiftpm/
 migrate_working_dir/
 
+# Log and temporary files
+*_log.txt
+log*.txt
+*_output.txt
+analyze_*.txt
+/scratch/
+
 # IntelliJ related
 *.iml
 *.ipr
