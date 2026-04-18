@@ -694,7 +694,12 @@ class CommunicationService {
     if (isFinalReceiver) {
       await _db.upsertMessage(processedMessage);
       _eventController.add(MessageReceivedEvent(processedMessage, eid));
-      await NotificationService().show(processedMessage);
+      // Resolve the human-readable name for the notification title.
+      // _endpointToName maps endpointId → displayName.
+      // Falls back gracefully inside show() if null.
+      final senderName = _endpointToName[eid];
+      await NotificationService().show(processedMessage, senderName: senderName);
+
       if (processedMessage.type != MessageType.ack) {
         _log.i('💡 [ACK-TRACE] Generating auto-ACK for message ${processedMessage.id} to ${processedMessage.senderId}');
         final ack = Message(

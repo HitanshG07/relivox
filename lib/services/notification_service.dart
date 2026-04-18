@@ -69,7 +69,7 @@ class NotificationService {
   /// MAIN ENTRY POINT
   /// Call this AFTER message is displayed in UI, BEFORE relay in
   /// communication_service.dart
-  Future<void> show(Message message) async {
+  Future<void> show(Message message, {String? senderName}) async {
     // GATE 1: Global notification toggle
     if (!SettingsService().enableNotifications) return;
 
@@ -81,14 +81,14 @@ class NotificationService {
     if (message.type == MessageType.emergency) {
       if (!SettingsService().enableEmergencyAlerts) return;
       await _showEmergencyNotification(message);
-      // _showInAppBanner(message); // User requested removal
     } else {
-      await _showNormalNotification(message);
-      // _showInAppBanner(message); // User requested removal
+      await _showNormalNotification(message, senderName: senderName);
     }
   }
 
-  Future<void> _showNormalNotification(Message message) async {
+
+  Future<void> _showNormalNotification(
+      Message message, {String? senderName}) async {
     const androidDetails = AndroidNotificationDetails(
       'relivox_normal',
       'Messages',
@@ -98,13 +98,19 @@ class NotificationService {
       playSound: true,
       enableVibration: false,
     );
+    // Prefer resolved display name; fall back to first 8 chars of UUID
+    // so the title is always human-readable even if name lookup fails.
+    final title = (senderName != null && senderName.isNotEmpty)
+        ? senderName
+        : message.senderId.substring(0, 8);
     await _plugin.show(
       message.id.hashCode,
-      message.senderId,     // Title = sender ID (mesh identity)
-      message.content,      // Body = message text
+      title,
+      message.content,
       const NotificationDetails(android: androidDetails),
     );
   }
+
 
   Future<void> _showEmergencyNotification(Message message) async {
     final androidDetails = AndroidNotificationDetails(
