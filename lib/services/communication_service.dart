@@ -756,8 +756,10 @@ class CommunicationService {
       if (permission == LocationPermission.always ||
           permission == LocationPermission.whileInUse) {
         final pos = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.medium,
-          timeLimit: const Duration(seconds: 5),
+          locationSettings: LocationSettings(
+            accuracy: LocationAccuracy.medium,
+            timeLimit: const Duration(seconds: 5),
+          ),
         );
         // 4 decimal places = ~11m accuracy, keeps BLE name short
         lat = pos.latitude.toStringAsFixed(4);

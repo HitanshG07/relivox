@@ -10,7 +10,10 @@ import 'settings_screen.dart';
 import 'chats_screen.dart';
 import '../../services/database_service.dart';
 import 'package:url_launcher/url_launcher.dart';
-
+import '../../blocs/sos/sos_bloc.dart';
+import '../../blocs/sos/sos_event.dart';
+import '../../blocs/sos/sos_state.dart';
+import '../../constants/sos_constants.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -23,128 +26,129 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0D0D1A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF13132B),
-        title: Text(
-          _currentIndex == 0 ? 'Chats' : 'Relivox Mesh',
-          style: const TextStyle(
-              color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          BlocBuilder<DiscoveryBloc, DiscoveryState>(
-            builder: (context, state) {
-              final hasAlerts = state.broadcastEmergencyLog.isNotEmpty;
-              return Stack(
-                alignment: Alignment.center,
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      Icons.notifications_active,
-                      color: hasAlerts ? Colors.redAccent : Colors.white38,
-                    ),
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => BroadcastLogScreen(
-                          log: state.broadcastEmergencyLog,
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (hasAlerts)
-                    Positioned(
-                      right: 8,
-                      top: 8,
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: Colors.redAccent,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            },
+    return BlocProvider<SosBloc>(
+      create: (_) => SosBloc(),
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0D0D1A),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF13132B),
+          title: Text(
+            _currentIndex == 0 ? 'Chats' : 'Relivox Mesh',
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold),
           ),
-          IconButton(
-            icon: const Icon(Icons.settings, color: Colors.white70),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            ),
-          ),
-          if (_currentIndex == 1)
+          actions: [
             BlocBuilder<DiscoveryBloc, DiscoveryState>(
               builder: (context, state) {
-                return IconButton(
-                  icon: state.isRefreshing
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white54,
+                final hasAlerts = state.broadcastEmergencyLog.isNotEmpty;
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        Icons.notifications_active,
+                        color: hasAlerts ? Colors.redAccent : Colors.white38,
+                      ),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => BroadcastLogScreen(
+                            log: state.broadcastEmergencyLog,
                           ),
-                        )
-                      : const Icon(Icons.refresh, color: Colors.white70),
-                  onPressed: state.isRefreshing
-                      ? null
-                      : () => context
-                          .read<DiscoveryBloc>()
-                          .add(ManualRefreshEvent()),
+                        ),
+                      ),
+                    ),
+                    if (hasAlerts)
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Colors.redAccent,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                  ],
                 );
               },
             ),
-
-        ],
-      ),
-      body: Column(
-        children: [
-          const _EmergencyBanner(),
-          if (_currentIndex == 1) const _DiscoveryHeader(),
-          Expanded(
-            child: _currentIndex == 0
-                ? const ChatsScreen()
-                : BlocBuilder<DiscoveryBloc, DiscoveryState>(
-                    builder: (context, state) {
-                      if (state.peers.isEmpty) {
-                        return const _EmptyDiscovery();
-                      }
-                      return ListView.builder(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: state.peers.length,
-                        itemBuilder: (context, i) =>
-                            _PeerTile(peer: state.peers[i]),
-                      );
-                    },
-                  ),
-          ),
-          if (_currentIndex == 1) const _BroadcastTrigger(),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        backgroundColor: const Color(0xFF13132B),
-        selectedItemColor: const Color(0xFF6C63FF),
-        unselectedItemColor: Colors.white38,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
-            activeIcon: Icon(Icons.chat_bubble),
-            label: 'Chats',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.radar),
-            activeIcon: Icon(Icons.radar),
-            label: 'Devices',
-          ),
-        ],
+            IconButton(
+              icon: const Icon(Icons.settings, color: Colors.white70),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              ),
+            ),
+            if (_currentIndex == 1)
+              BlocBuilder<DiscoveryBloc, DiscoveryState>(
+                builder: (context, state) {
+                  return IconButton(
+                    icon: state.isRefreshing
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white54,
+                            ),
+                          )
+                        : const Icon(Icons.refresh, color: Colors.white70),
+                    onPressed: state.isRefreshing
+                        ? null
+                        : () => context
+                            .read<DiscoveryBloc>()
+                            .add(ManualRefreshEvent()),
+                  );
+                },
+              ),
+          ],
+        ),
+        body: Column(
+          children: [
+            const _EmergencyBanner(),
+            if (_currentIndex == 1) const _DiscoveryHeader(),
+            Expanded(
+              child: _currentIndex == 0
+                  ? const ChatsScreen()
+                  : BlocBuilder<DiscoveryBloc, DiscoveryState>(
+                      builder: (context, state) {
+                        if (state.peers.isEmpty) {
+                          return const _EmptyDiscovery();
+                        }
+                        return ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: state.peers.length,
+                          itemBuilder: (context, i) =>
+                              _PeerTile(peer: state.peers[i]),
+                        );
+                      },
+                    ),
+            ),
+            if (_currentIndex == 1) const _SosTrigger(),
+          ],
+        ),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) => setState(() => _currentIndex = index),
+          backgroundColor: const Color(0xFF13132B),
+          selectedItemColor: const Color(0xFF6C63FF),
+          unselectedItemColor: Colors.white38,
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.chat_bubble_outline),
+              activeIcon: Icon(Icons.chat_bubble),
+              label: 'Chats',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.radar),
+              activeIcon: Icon(Icons.radar),
+              label: 'Devices',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -186,9 +190,12 @@ class _EmergencyBanner extends StatelessWidget {
                     FutureBuilder<String?>(
                       future: DatabaseService().getDisplayName(msg.senderId),
                       builder: (context, snapshot) {
-                        final name = (snapshot.data != null && snapshot.data!.isNotEmpty)
-                            ? snapshot.data!
-                            : msg.senderId.substring(msg.senderId.length - 4).toUpperCase();
+                        final name =
+                            (snapshot.data != null && snapshot.data!.isNotEmpty)
+                                ? snapshot.data!
+                                : msg.senderId
+                                    .substring(msg.senderId.length - 4)
+                                    .toUpperCase();
                         return Text(
                           'BROADCAST ALERT from $name',
                           style: const TextStyle(
@@ -225,8 +232,7 @@ class _EmergencyBanner extends StatelessWidget {
                             const SizedBox(height: 8),
                             GestureDetector(
                               onTap: () async {
-                                final uri =
-                                    Uri.parse(geoMatch.group(0)!);
+                                final uri = Uri.parse(geoMatch.group(0)!);
                                 if (await canLaunchUrl(uri)) {
                                   launchUrl(uri);
                                 }
@@ -235,23 +241,19 @@ class _EmergencyBanner extends StatelessWidget {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 10, vertical: 6),
                                 decoration: BoxDecoration(
-                                  color: Colors.white
-                                      .withValues(alpha: 0.15),
-                                  borderRadius:
-                                      BorderRadius.circular(8),
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: const Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(Icons.map,
-                                        color: Colors.white,
-                                        size: 16),
+                                        color: Colors.white, size: 16),
                                     SizedBox(width: 6),
                                     Text(
                                       '📍 Open Offline Map',
                                       style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 13),
+                                          color: Colors.white, fontSize: 13),
                                     ),
                                   ],
                                 ),
@@ -261,13 +263,14 @@ class _EmergencyBanner extends StatelessWidget {
                         ],
                       );
                     }),
-
                   ],
                 ),
               ),
               IconButton(
                 icon: const Icon(Icons.close, color: Colors.white70, size: 20),
-                onPressed: () => context.read<DiscoveryBloc>().add(ClearBroadcastEmergencyEvent()),
+                onPressed: () => context
+                    .read<DiscoveryBloc>()
+                    .add(ClearBroadcastEmergencyEvent()),
               ),
             ],
           ),
@@ -281,12 +284,12 @@ class _BroadcastTrigger extends StatelessWidget {
   const _BroadcastTrigger();
 
   // Step 1 — show type selector bottom sheet
-  void _showTypeSelector(BuildContext context) {
+  void showTypeSelector(BuildContext context) {
     final types = [
-      ('FIRE', '🔥', 'Fire / Hazard',      Colors.deepOrange),
-      ('MEDC', '🚑', 'Medical Emergency',  Colors.redAccent),
+      ('FIRE', '🔥', 'Fire / Hazard', Colors.deepOrange),
+      ('MEDC', '🚑', 'Medical Emergency', Colors.redAccent),
       ('TRAP', '🆘', 'Trapped / Immobile', Colors.orange),
-      ('GEN',  '⚠️', 'General Emergency',  Colors.yellow),
+      ('GEN', '⚠️', 'General Emergency', Colors.yellow),
     ];
 
     showModalBottomSheet(
@@ -327,7 +330,6 @@ class _BroadcastTrigger extends StatelessWidget {
                     () => _showMessageDialog(context, code, '$emoji $label'),
                   );
                 },
-
               );
             }),
           ],
@@ -364,8 +366,8 @@ class _BroadcastTrigger extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('CANCEL',
-                style: TextStyle(color: Colors.white38)),
+            child:
+                const Text('CANCEL', style: TextStyle(color: Colors.white38)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
@@ -397,12 +399,12 @@ class _BroadcastTrigger extends StatelessWidget {
         width: double.infinity,
         height: 50,
         child: ElevatedButton.icon(
-          onPressed: () => _showTypeSelector(context),
+          onPressed: () => showTypeSelector(context),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.redAccent,
             foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
           icon: const Icon(Icons.campaign),
           label: const Text('📢 SEND BROADCAST EMERGENCY',
@@ -500,7 +502,8 @@ class _EmptyDiscovery extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.radar, size: 48, color: Colors.blueAccent.withValues(alpha: 0.3)),
+          Icon(Icons.radar,
+              size: 48, color: Colors.blueAccent.withValues(alpha: 0.3)),
           const SizedBox(height: 16),
           const Text('Searching for peers...',
               style: TextStyle(color: Colors.white38)),
@@ -528,7 +531,9 @@ class _PeerTile extends StatelessWidget {
         color: const Color(0xFF13132B),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isConnected ? Colors.greenAccent.withValues(alpha: 0.3) : Colors.white12,
+          color: isConnected
+              ? Colors.greenAccent.withValues(alpha: 0.3)
+              : Colors.white12,
         ),
       ),
       child: ListTile(
@@ -543,17 +548,20 @@ class _PeerTile extends StatelessWidget {
           ),
         ),
         title: Text(
-          peer.displayName.isNotEmpty 
-            ? peer.displayName 
-            : (peer.deviceId ?? peer.endpointId),
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          peer.displayName.isNotEmpty
+              ? peer.displayName
+              : (peer.deviceId ?? peer.endpointId),
+          style:
+              const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         subtitle: Text(
           isConnected
               ? 'Connected via mesh'
               : (isConnecting ? 'Connecting...' : 'Tap to connect'),
           style: TextStyle(
-            color: isConnected ? Colors.greenAccent.withValues(alpha: 0.7) : Colors.white38,
+            color: isConnected
+                ? Colors.greenAccent.withValues(alpha: 0.7)
+                : Colors.white38,
             fontSize: 12,
           ),
         ),
@@ -565,7 +573,9 @@ class _PeerTile extends StatelessWidget {
               MaterialPageRoute(builder: (_) => ChatScreen(targetPeer: peer)),
             );
           } else if (!isConnecting) {
-            context.read<DiscoveryBloc>().add(ConnectToPeerEvent(peer.displayName));
+            context
+                .read<DiscoveryBloc>()
+                .add(ConnectToPeerEvent(peer.displayName));
           }
         },
       ),
@@ -578,7 +588,8 @@ class _PeerTile extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
-            icon: const Icon(Icons.chat_bubble_outline, color: Color(0xFF6C63FF)),
+            icon:
+                const Icon(Icons.chat_bubble_outline, color: Color(0xFF6C63FF)),
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => ChatScreen(targetPeer: peer)),
@@ -586,8 +597,9 @@ class _PeerTile extends StatelessWidget {
           ),
           IconButton(
             icon: const Icon(Icons.link_off, color: Colors.white24),
-            onPressed: () =>
-                context.read<DiscoveryBloc>().add(DisconnectFromPeerEvent(peer.displayName)),
+            onPressed: () => context
+                .read<DiscoveryBloc>()
+                .add(DisconnectFromPeerEvent(peer.displayName)),
           ),
         ],
       );
@@ -604,8 +616,9 @@ class _PeerTile extends StatelessWidget {
     return IconButton(
       icon: const Icon(Icons.link, color: Colors.blueAccent),
       tooltip: 'Connect',
-      onPressed: () =>
-          context.read<DiscoveryBloc>().add(ConnectToPeerEvent(peer.displayName)),
+      onPressed: () => context
+          .read<DiscoveryBloc>()
+          .add(ConnectToPeerEvent(peer.displayName)),
     );
   }
 }
@@ -625,7 +638,8 @@ class BroadcastLogScreen extends StatelessWidget {
             Icon(Icons.notifications_active, color: Colors.redAccent, size: 20),
             SizedBox(width: 8),
             Text('Broadcast Alerts',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
           ],
         ),
         iconTheme: const IconThemeData(color: Colors.white70),
@@ -659,7 +673,8 @@ class BroadcastLogScreen extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: Colors.red.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                    border: Border.all(
+                        color: Colors.redAccent.withValues(alpha: 0.3)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -670,11 +685,15 @@ class BroadcastLogScreen extends StatelessWidget {
                               color: Colors.redAccent, size: 16),
                           const SizedBox(width: 6),
                           FutureBuilder<String?>(
-                            future: DatabaseService().getDisplayName(msg.senderId),
+                            future:
+                                DatabaseService().getDisplayName(msg.senderId),
                             builder: (context, snapshot) {
-                              final name = (snapshot.data != null && snapshot.data!.isNotEmpty)
+                              final name = (snapshot.data != null &&
+                                      snapshot.data!.isNotEmpty)
                                   ? snapshot.data!
-                                  : msg.senderId.substring(msg.senderId.length - 6).toUpperCase();
+                                  : msg.senderId
+                                      .substring(msg.senderId.length - 6)
+                                      .toUpperCase();
                               return Text(
                                 'FROM: $name',
                                 style: const TextStyle(
@@ -696,7 +715,8 @@ class BroadcastLogScreen extends StatelessWidget {
                             RegExp(r'geo:[^\s]+').firstMatch(msg.payload);
                         final cleanText = msg.payload
                             .replaceAll(
-                                RegExp(r'\nTap to open offline map:\ngeo:[^\s]+'),
+                                RegExp(
+                                    r'\nTap to open offline map:\ngeo:[^\s]+'),
                                 '')
                             .trim();
 
@@ -712,8 +732,7 @@ class BroadcastLogScreen extends StatelessWidget {
                               const SizedBox(height: 8),
                               GestureDetector(
                                 onTap: () async {
-                                  final uri =
-                                      Uri.parse(geoMatch.group(0)!);
+                                  final uri = Uri.parse(geoMatch.group(0)!);
                                   if (await canLaunchUrl(uri)) {
                                     launchUrl(uri);
                                   }
@@ -722,17 +741,15 @@ class BroadcastLogScreen extends StatelessWidget {
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 10, vertical: 6),
                                   decoration: BoxDecoration(
-                                    color: Colors.redAccent
-                                        .withValues(alpha: 0.2),
-                                    borderRadius:
-                                        BorderRadius.circular(8),
+                                    color:
+                                        Colors.redAccent.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: const Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Icon(Icons.map,
-                                          color: Colors.redAccent,
-                                          size: 16),
+                                          color: Colors.redAccent, size: 16),
                                       SizedBox(width: 6),
                                       Text(
                                         '📍 Open Offline Map',
@@ -748,12 +765,204 @@ class BroadcastLogScreen extends StatelessWidget {
                           ],
                         );
                       }),
-
                     ],
                   ),
                 );
               },
             ),
     );
+  }
+}
+
+class _SosTrigger extends StatelessWidget {
+  const _SosTrigger();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<SosBloc, SosState>(
+      builder: (context, state) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: () =>
+                      _BroadcastTrigger().showTypeSelector(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1A1A35),
+                    foregroundColor: Colors.white70,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: const Icon(Icons.campaign, size: 18),
+                  label: const Text('📢 Manual Broadcast',
+                      style: TextStyle(fontSize: 13)),
+                ),
+              ),
+              const SizedBox(height: 10),
+              _buildSosButton(context, state),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSosButton(BuildContext context, SosState state) {
+    switch (state.status) {
+      case SosStatus.inactive:
+        return SizedBox(
+          width: double.infinity,
+          height: 56,
+          child: ElevatedButton.icon(
+            onPressed: () =>
+                context.read<SosBloc>().add(const SosActivateEvent()),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+              elevation: 4,
+            ),
+            icon: const Icon(Icons.sos, size: 22),
+            label: const Text('🆘  SOS',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ),
+        );
+
+      case SosStatus.active:
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.red.shade900.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.redAccent, width: 1.5),
+          ),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.sos, color: Colors.redAccent, size: 20),
+                  const SizedBox(width: 8),
+                  const Text('SOS ACTIVE',
+                      style: TextStyle(
+                        color: Colors.redAccent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      )),
+                  const Spacer(),
+                  Text(
+                    '${state.broadcastCount}/'
+                    '${SosConstants.maxBroadcasts}',
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Next broadcast in ${state.secondsRemaining}s',
+                style: const TextStyle(color: Colors.white60, fontSize: 12),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 38,
+                child: OutlinedButton(
+                  onPressed: () =>
+                      context.read<SosBloc>().add(const SosCancelEvent()),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white54,
+                    side: const BorderSide(color: Colors.white24),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('CANCEL SOS'),
+                ),
+              ),
+            ],
+          ),
+        );
+
+      case SosStatus.paused:
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade900.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.orange, width: 1.5),
+          ),
+          child: Column(
+            children: [
+              const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.pause_circle_outline,
+                      color: Colors.orange, size: 20),
+                  SizedBox(width: 8),
+                  Text('SOS PAUSED',
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      )),
+                ],
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                '5 broadcasts sent — extend or cancel.',
+                style: TextStyle(color: Colors.white54, fontSize: 11),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 38,
+                      child: ElevatedButton(
+                        onPressed: () =>
+                            context.read<SosBloc>().add(const SosExtendEvent()),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                        child: const Text('EXTEND 5 MIN',
+                            style: TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SizedBox(
+                      height: 38,
+                      child: OutlinedButton(
+                        onPressed: () =>
+                            context.read<SosBloc>().add(const SosCancelEvent()),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white54,
+                          side: const BorderSide(color: Colors.white24),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                        child: const Text('CANCEL',
+                            style: TextStyle(fontSize: 12)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+    }
   }
 }
