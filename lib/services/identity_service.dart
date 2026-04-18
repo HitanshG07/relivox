@@ -3,6 +3,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logger/logger.dart';
 import 'package:uuid/uuid.dart';
+import 'encryption_service.dart';
 
 final _log = Logger(printer: PrettyPrinter(methodCount: 0));
 
@@ -59,7 +60,10 @@ class IdentityService {
       _publicKeyBase64 = base64Encode(pubBytes);
     }
     _log.i('Identity loaded: $_deviceId ($_displayName)');
+    // Pre-warm encryption key derivation so first send has no delay
+    await EncryptionService().init();
   }
+
 
   String _generateAndSaveId() {
     final id = const Uuid().v4();

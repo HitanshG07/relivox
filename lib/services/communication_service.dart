@@ -11,6 +11,8 @@ import '../protocols/gossip_manager.dart';
 import 'database_service.dart';
 import 'identity_service.dart';
 import 'notification_service.dart';
+import 'encryption_service.dart';
+
 
 final _log = Logger(printer: PrettyPrinter(methodCount: 0));
 
@@ -85,6 +87,8 @@ class CommunicationService {
   final IdentityService _identity;
   final DatabaseService _db;
   late final GossipManager _gossip;
+  final _enc = EncryptionService();
+
 
   static CommunicationService? _instance;
   factory CommunicationService([IdentityService? identity, DatabaseService? db]) {
@@ -98,7 +102,11 @@ class CommunicationService {
   }
 
   CommunicationService._internal(this._identity, this._db) {
+    // Encryption init is fire-and-forget at construction;
+    // all sends are async so key is ready before first use
+    EncryptionService().init();
     _kChannel.setMethodCallHandler(_onNativeCall);
+
     _gossip = GossipManager(
       myDeviceId: _identity.deviceId,
       transmit: (endpointId, payload) => _kChannel.invokeMethod('sendPayload', {
@@ -369,12 +377,17 @@ class CommunicationService {
   }
 
   Future<void> broadcastMessage(Message message) async {
-    final updatedMessage = message.copyWith(ttl: (message.ttl > 0) ? message.ttl - 1 : 0);
+    final updatedMessage = message.copyWith(
+        ttl: (message.ttl > 0) ? message.ttl - 1 : 0);
     _gossip.markSeen(updatedMessage.id);
     await _db.upsertMessage(updatedMessage);
+    final plainJson    = updatedMessage.toWireJson();
+    final encryptedPayload = await _enc.encrypt(plainJson);
     _log.i('💡 [TX-TRACE] Invoking broadcastPayload for ${updatedMessage.id}');
-    await _kChannel.invokeMethod('broadcastPayload', {'payload': updatedMessage.toWireJson()});
+    await _kChannel.invokeMethod('broadcastPayload',
+        {'payload': encryptedPayload});
   }
+
 
   // ── Native → Dart callbacks ───────────────────────────────────────────────
 
@@ -608,11 +621,20 @@ class CommunicationService {
 
   Future<void> _handlePayload(Map<String, dynamic> args) async {
     final eid = args['endpointId'] as String;
-    final payloadStr = args['payload'] as String? ?? '';
+    final rawPayload = args['payload'] as String? ?? '';
+
+    // Attempt decryption — drop packet silently if it fails
+    final payloadStr = await _enc.decrypt(rawPayload);
+    if (payloadStr == null) {
+      _log.w('[ENC] Dropped packet from $eid — decryption failed');
+      return;
+    }
+
     late Message incoming;
     try {
       incoming = Message.fromWireJson(payloadStr);
     } catch (e) { return; }
+
 
     if (_seenMessageIds.contains(incoming.id)) return;
     _seenMessageIds.add(incoming.id);
