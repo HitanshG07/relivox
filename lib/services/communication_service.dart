@@ -204,7 +204,13 @@ class CommunicationService {
     _endpointLastSeen.clear();
     _deviceEndpoints.clear();
     _seenMessageTimestamps.clear();
+    _exposedIdForName.clear();
+    _connectingDevices.clear();
+    // NOTE: Do NOT clear _connectedDevices here — that is handled
+    // by onDisconnected events fired by Nearby after stopAll().
+    // Clearing it here would cause the isEmpty guard to misbehave.
   }
+
 
   Future<void> startAll() async {
     if (_isRunning) return;
@@ -311,17 +317,31 @@ class CommunicationService {
 
   Future<void> connectToDevice(String name) async {
     if (_connectedDevices.contains(name)) return;
-    // Wait for any in-progress restart to settle so
-    // _exposedIdForName contains the fresh endpointId.
+
+    // Clear any stale "connecting" state from a previous attempt
+    // that was aborted by a Nearby restart. Without this, the device
+    // appears stuck and the UI never allows a retry.
+    if (_connectingDevices.contains(name)) {
+      final currentEid = _exposedIdForName[name];
+      if (currentEid == null) {
+        // No fresh endpoint — genuinely still waiting for rediscovery
+        _log.w('[CONNECT] $name still connecting but no eid — skipping');
+        return;
+      }
+      // Has a fresh eid — previous attempt was stale, clear and retry
+      _log.i('[CONNECT] $name had stale connecting state — clearing and retrying');
+      _connectingDevices.remove(name);
+    }
+
     await Future.delayed(const Duration(milliseconds: 600));
-    // Check again after delay — might have connected during wait.
     if (_connectedDevices.contains(name)) return;
-    _connectingDevices.remove(name);
+
     final endpointId = _exposedIdForName[name];
     if (endpointId == null) return;
     _connectingDevices.add(name);
     await _requestConnection(endpointId);
   }
+
  
   Future<void> disconnectFromDevice(String name) async {
     final endpoints = _deviceEndpoints[name];
@@ -695,6 +715,15 @@ class CommunicationService {
   }
 
   Future<void> _restartDiscoveryAndAdvertising() async {
+    // SAFETY: Never restart if peers are still connected.
+    // stopDiscovery/stopAdvertising on Nearby will NOT drop
+    // already-established connections, but we guard here
+    // to avoid the edge case where Nearby firmware does.
+    if (_connectedEndpoints.isNotEmpty) {
+      _log.i('[RESTART] Skipped — ${_connectedEndpoints.length} '
+             'active connections still live');
+      return;
+    }
     try { await stopDiscovery(); } catch (_) {}
     try { await stopAdvertising(); } catch (_) {}
     await Future.delayed(const Duration(milliseconds: 200));
@@ -703,9 +732,15 @@ class CommunicationService {
     await startAdvertising();
   }
 
+
   Future<void> forceRefresh() async {
+    // Clear all in-progress connection attempts before restarting.
+    // After restart all endpointIds change — stale connecting state
+    // would permanently block re-connection to those devices.
+    _connectingDevices.clear();
     await _restartDiscoveryAndAdvertising();
   }
+
 
   /// Restarts advertising with an |EMG:xxxx suffix embedded in the
   /// endpointName so nearby non-connected devices can detect the alert.
