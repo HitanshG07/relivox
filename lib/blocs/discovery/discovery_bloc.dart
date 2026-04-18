@@ -69,6 +69,7 @@ class ClearBroadcastLogEvent extends DiscoveryEvent {}
 class DiscoveryState extends Equatable {
   final List<Peer> peers;
   final bool isRunning;
+  final bool isRefreshing;
   final String? error;
   final Message? latestBroadcastEmergency;
   final List<Message> broadcastEmergencyLog;
@@ -76,14 +77,17 @@ class DiscoveryState extends Equatable {
   const DiscoveryState({
     this.peers = const [],
     this.isRunning = false,
+    this.isRefreshing = false,
     this.error,
     this.latestBroadcastEmergency,
     this.broadcastEmergencyLog = const [],
   });
 
+
   DiscoveryState copyWith({
     List<Peer>? peers,
     bool? isRunning,
+    bool? isRefreshing,
     String? error,
     Message? latestBroadcastEmergency,
     List<Message>? broadcastEmergencyLog,
@@ -92,14 +96,19 @@ class DiscoveryState extends Equatable {
       DiscoveryState(
         peers: peers ?? this.peers,
         isRunning: isRunning ?? this.isRunning,
+        isRefreshing: isRefreshing ?? this.isRefreshing,
         error: error,
         latestBroadcastEmergency:
             clearEmergency ? null : (latestBroadcastEmergency ?? this.latestBroadcastEmergency),
-        broadcastEmergencyLog: broadcastEmergencyLog ?? this.broadcastEmergencyLog,
+        broadcastEmergencyLog:
+            broadcastEmergencyLog ?? this.broadcastEmergencyLog,
       );
 
+
   @override
-  List<Object?> get props => [peers, isRunning, error, latestBroadcastEmergency, broadcastEmergencyLog];
+  List<Object?> get props => [peers, isRunning, isRefreshing,
+      error, latestBroadcastEmergency, broadcastEmergencyLog];
+
 }
 
 // ── BLoC ─────────────────────────────────────────────────────────────────────
@@ -218,14 +227,20 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
   }
 
   void _onLost(_NativePeerLost e, Emitter<DiscoveryState> emit) {
+    // Keep peer visible as "discovered" — do NOT hide it.
+    // A single missed BLE beacon should not remove a nearby device.
+    // Only _onDisconnected (confirmed by Nearby Connections) should
+    // change status away from connected.
     final peers = state.peers.map((p) {
-      if (p.endpointId == e.endpointId) {
-        return p.copyWith(status: PeerStatus.disconnected);
+      if (p.endpointId == e.endpointId &&
+          p.status != PeerStatus.connected) {
+        return p.copyWith(status: PeerStatus.discovered);
       }
       return p;
     }).toList();
     emit(state.copyWith(peers: peers));
   }
+
 
   void _onConnected(_NativePeerConnected e, Emitter<DiscoveryState> emit) {
     // LEVEL 1: Fast path — match by endpointId (normal case)
@@ -346,24 +361,26 @@ class DiscoveryBloc extends Bloc<DiscoveryEvent, DiscoveryState> {
     emit(state.copyWith(peers: peers));
   }
 
-  Future<void> _onManualRefresh(ManualRefreshEvent e, Emitter<DiscoveryState> emit) async {
-    // Check if any peers are currently connected
+  Future<void> _onManualRefresh(
+      ManualRefreshEvent e, Emitter<DiscoveryState> emit) async {
+    // Instant UI feedback — spinner shows immediately on tap
+    emit(state.copyWith(isRefreshing: true));
+
     final hasActiveConnections = state.peers.any(
       (p) => p.status == PeerStatus.connected,
     );
 
     if (hasActiveConnections) {
-      // SAFE PATH: connections are live — only sync the peer list from
-      // the service layer, do NOT touch Nearby advertising/discovery.
-      debugPrint('[ManualRefresh] Active connections present — soft refresh only');
+      debugPrint('[ManualRefresh] Active connections — soft refresh only');
       add(RefreshPeersEvent());
-      return;
+    } else {
+      debugPrint('[ManualRefresh] No active connections — full restart');
+      await _comm.forceRefresh();
     }
 
-    // FULL PATH: no active connections — safe to do a full Nearby restart
-    debugPrint('[ManualRefresh] No active connections — full restart allowed');
-    await _comm.forceRefresh();
+    emit(state.copyWith(isRefreshing: false));
   }
+
 
   void _onIncomingEmergency(_IncomingBroadcastEmergency e, Emitter<DiscoveryState> emit) {
     emit(state.copyWith(

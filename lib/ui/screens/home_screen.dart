@@ -78,11 +78,28 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           if (_currentIndex == 1)
-            IconButton(
-              icon: const Icon(Icons.refresh, color: Colors.white70),
-              onPressed: () =>
-                  context.read<DiscoveryBloc>().add(ManualRefreshEvent()),
+            BlocBuilder<DiscoveryBloc, DiscoveryState>(
+              builder: (context, state) {
+                return IconButton(
+                  icon: state.isRefreshing
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white54,
+                          ),
+                        )
+                      : const Icon(Icons.refresh, color: Colors.white70),
+                  onPressed: state.isRefreshing
+                      ? null
+                      : () => context
+                          .read<DiscoveryBloc>()
+                          .add(ManualRefreshEvent()),
+                );
+              },
             ),
+
         ],
       ),
       body: Column(
