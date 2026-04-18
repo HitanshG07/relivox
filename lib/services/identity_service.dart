@@ -3,7 +3,9 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logger/logger.dart';
 import 'package:uuid/uuid.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'encryption_service.dart';
+
 
 final _log = Logger(printer: PrettyPrinter(methodCount: 0));
 
@@ -20,6 +22,12 @@ class IdentityService {
   static const _kDisplayName = 'relivox_display_name';
   static const _kSignKeyPrivate = 'relivox_sign_key_private';
   static const _kSignKeyPublic = 'relivox_sign_key_public';
+
+  // SharedPreferences stores keys with a 'flutter.' prefix internally.
+  // We read it directly via SharedPreferences to avoid a circular init
+  // dependency with SettingsService.
+  static const _kSettingsUsername = 'username';
+
 
   final _storage = const FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
@@ -60,9 +68,25 @@ class IdentityService {
       _publicKeyBase64 = base64Encode(pubBytes);
     }
     _log.i('Identity loaded: $_deviceId ($_displayName)');
+
+    // Reconcile with SettingsService: if the user set a custom
+    // name in Settings (not the default 'Anonymous'), it wins
+    // over the auto-generated 'Device-XXXX' name from Keystore.
+    final prefs = await SharedPreferences.getInstance();
+    final settingsName = prefs.getString(_kSettingsUsername);
+    if (settingsName != null &&
+        settingsName.isNotEmpty &&
+        settingsName != 'Anonymous' &&
+        settingsName != _displayName) {
+      _displayName = settingsName;
+      await _storage.write(key: _kDisplayName, value: settingsName);
+      _log.i('Identity reconciled: display name updated to "$settingsName" from SettingsService');
+    }
+
     // Pre-warm encryption key derivation so first send has no delay
     await EncryptionService().init();
   }
+
 
 
   String _generateAndSaveId() {
