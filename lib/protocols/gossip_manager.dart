@@ -7,8 +7,6 @@ import '../services/database_service.dart';
 import '../services/settings_service.dart';
 import '../constants/mesh_constants.dart';
 
-enum MeshMode { STAR, CLUSTER }
-
 enum DeviceState { READY, LIMITED, FULL }
 
 /// Internal wrapper for messages in the persistent pending queue.
@@ -129,12 +127,6 @@ class GossipManager {
     _connectedEndpoints.remove(endpointId);
     _connectionTimes.remove(endpointId); // NEW — clean up
   }
-
-  /// Current mesh advertising mode.
-  MeshMode get meshMode =>
-      _connectedEndpoints.length >= MeshConstants.clusterThreshold
-          ? MeshMode.CLUSTER
-          : MeshMode.STAR;
 
   /// Number of currently connected endpoints.
   int get connectedCount => _connectedEndpoints.length;

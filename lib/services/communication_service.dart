@@ -574,7 +574,7 @@ class CommunicationService {
           _connectedEndpoints.add(eid);
           _gossip.onEndpointConnected(eid);
           _gossip.sendPeerManifest(eid); // Phase 8: fire-and-forget
-          _log.i('[Mesh] Mode: ${_gossip.meshMode.name} '
+          _log.i('[Mesh] P2P_CLUSTER '
               '(${_gossip.connectedCount}/${MeshConstants.clusterThreshold} peers)');
           // Flush is now handled by the 3s delayed call inside
           // onEndpointConnected — removing instant flush here
