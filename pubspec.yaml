@@ -25,11 +25,17 @@ dependencies:
   shared_preferences: ^2.2.3
   local_auth: ^2.2.0
   flutter_local_notifications: ^17.0.0
+  flutter_foreground_task: ^8.0.0
+  record: ^5.1.2
+  just_audio: ^0.9.40
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   mocktail: ^1.0.3
+
+dependency_overrides:
+  record_linux: ^1.0.0
 
 flutter:
   uses-material-design: true

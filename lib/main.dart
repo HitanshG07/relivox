@@ -6,6 +6,7 @@ import 'services/database_service.dart';
 import 'services/communication_service.dart';
 import 'services/settings_service.dart';
 import 'services/notification_service.dart';
+import 'services/foreground_service.dart';
 import 'blocs/discovery/discovery_bloc.dart';
 import 'blocs/settings/settings_bloc.dart';
 import 'ui/screens/splash_screen.dart';
@@ -18,6 +19,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SettingsService().init();
   await NotificationService().init();
+  await ForegroundService().init();
 
   // Lock to portrait for consistent P2P interaction UX
   await SystemChrome.setPreferredOrientations([

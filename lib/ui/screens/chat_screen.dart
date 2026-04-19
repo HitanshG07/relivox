@@ -7,7 +7,9 @@ import '../../models/peer.dart';
 import '../../services/identity_service.dart';
 import '../../services/communication_service.dart';
 import '../../services/database_service.dart';
+import '../../services/voice_service.dart';
 import '../../constants/hop_tick_constants.dart';
+import '../widgets/voice_message_bubble.dart';
 
 class ChatScreen extends StatefulWidget {
   final Peer targetPeer;
@@ -20,6 +22,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
+  bool _isRecording = false;
 
   @override
   Widget build(BuildContext context) {
@@ -52,6 +55,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 controller: _controller,
                 onSend: () => _send(context),
                 targetPeer: widget.targetPeer,
+                isRecording: _isRecording,
+                onRecordStart: () => _startVoiceRecord(context),
+                onRecordEnd: () => _stopVoiceRecord(context),
               ),
             ],
           ),
@@ -74,6 +80,19 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       }
     });
+  }
+
+  void _startVoiceRecord(BuildContext context) async {
+    setState(() => _isRecording = true);
+    await VoiceService().startRecording();
+  }
+
+  void _stopVoiceRecord(BuildContext context) async {
+    final b64 = await VoiceService().stopRecordingAsBase64();
+    setState(() => _isRecording = false);
+    if (b64 != null && context.mounted) {
+      context.read<ChatBloc>().add(SendTextMessage('voice:$b64'));
+    }
   }
 
   @override
@@ -190,9 +209,15 @@ class _MessageBubble extends StatelessWidget {
                         ],
                       ),
                     ),
-                  Text(message.payload,
-                      style:
-                          const TextStyle(color: Colors.white, fontSize: 14)),
+                  if (message.payload.startsWith('voice:'))
+                    VoiceMessageBubble(
+                      base64Audio: message.payload.substring(6),
+                      isOwn: isMe,
+                    )
+                  else
+                    Text(message.payload,
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 14)),
                   const SizedBox(height: 4),
                   Row(
                     mainAxisSize: MainAxisSize.min,
@@ -280,10 +305,16 @@ class _InputBar extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
   final Peer targetPeer;
+  final bool isRecording;
+  final VoidCallback onRecordStart;
+  final VoidCallback onRecordEnd;
   const _InputBar({
     required this.controller,
     required this.onSend,
     required this.targetPeer,
+    required this.isRecording,
+    required this.onRecordStart,
+    required this.onRecordEnd,
   });
 
   void _showEmergencyOptions(BuildContext context) {
@@ -371,7 +402,17 @@ class _InputBar extends StatelessWidget {
                 onSubmitted: (_) => onSend(),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
+            GestureDetector(
+              onLongPressStart: (_) => onRecordStart(),
+              onLongPressEnd: (_) => onRecordEnd(),
+              child: Icon(
+                isRecording ? Icons.mic : Icons.mic_none,
+                color: isRecording ? Colors.red : Colors.white70,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 4),
             GestureDetector(
               onTap: onSend,
               child: Container(

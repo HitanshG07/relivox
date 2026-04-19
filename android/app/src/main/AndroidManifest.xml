@@ -54,6 +54,13 @@
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
 
+    <!-- Foreground service (mesh relay alive in background) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
+
+    <!-- Microphone for push-to-talk voice messages -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+
     <application
         android:label="Relivox"
         android:name="${applicationName}"
@@ -78,6 +85,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- flutter_foreground_task: keeps mesh relay alive -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundTaskService"
+            android:foregroundServiceType="connectedDevice"
+            android:exported="false"/>
+
+        <!-- flutter_foreground_task: auto-restart after device reboot -->
+        <receiver
+            android:name="com.pravera.flutter_foreground_task.receiver.TaskStartReceiver"
+            android:exported="false"/>
 
         <meta-data
             android:name="flutterEmbedding"
