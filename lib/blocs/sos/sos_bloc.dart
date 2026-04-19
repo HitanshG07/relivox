@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../constants/ack_constants.dart';
 import '../../constants/sos_constants.dart';
+import '../../services/communication_service.dart' hide AckReceivedEvent;
+import '../../models/message.dart';
 import '../../services/sos_service.dart';
 import 'sos_event.dart';
 import 'sos_state.dart';
@@ -18,17 +21,24 @@ import '../mic/mic_bloc.dart';
 class SosBloc extends Bloc<SosEvent, SosState> {
   final SosService _sos;
   final MicBloc _mic;
+  final CommunicationService _comm;
   Timer? _tickTimer;
+  StreamSubscription<Message>? _commSubscription;
 
-  SosBloc({SosService? sosService, required MicBloc mic})
-      : _sos = sosService ?? SosService(),
+  SosBloc({
+    SosService? sosService,
+    required MicBloc mic,
+    required CommunicationService comm,
+  })  : _sos = sosService ?? SosService(),
         _mic = mic,
+        _comm = comm,
         super(const SosState()) {
     on<SosActivateEvent>(_onActivate);
     on<SosCancelEvent>(_onCancel);
     on<SosExtendEvent>(_onExtend);
     on<SosTickEvent>(_onTick);
     on<SosBroadcastEvent>(_onBroadcast);
+    on<AckReceivedEvent>(_onAckReceived);
   }
 
   Future<void> _onActivate(SosActivateEvent e, Emitter<SosState> emit) async {
@@ -39,12 +49,14 @@ class SosBloc extends Bloc<SosEvent, SosState> {
       broadcastCount: 0,
       secondsRemaining: SosConstants.broadcastIntervalSeconds,
     ));
+    _startCommSubscription();
     add(const SosBroadcastEvent());
     _startTimer();
   }
 
   void _onCancel(SosCancelEvent e, Emitter<SosState> emit) {
     _cancelTimer();
+    _cancelCommSubscription();
     emit(const SosState());
   }
 
@@ -55,6 +67,7 @@ class SosBloc extends Bloc<SosEvent, SosState> {
       broadcastCount: 0,
       secondsRemaining: SosConstants.broadcastIntervalSeconds,
     ));
+    _startCommSubscription();
     add(const SosBroadcastEvent());
     _startTimer();
   }
@@ -77,16 +90,29 @@ class SosBloc extends Bloc<SosEvent, SosState> {
       broadcastNumber: newCount,
       medicalInfo: _mic.state.info.isEmpty ? null : _mic.state.info,
     );
+    final msgId = _comm.lastSentMessageId;
     if (newCount >= SosConstants.maxBroadcasts) {
       _cancelTimer();
       emit(state.copyWith(
         status: SosStatus.paused,
         broadcastCount: newCount,
         secondsRemaining: 0,
+        currentSosMessageId: msgId,
       ));
     } else {
-      emit(state.copyWith(broadcastCount: newCount));
+      emit(state.copyWith(
+        broadcastCount: newCount,
+        currentSosMessageId: msgId,
+      ));
     }
+  }
+
+  void _onAckReceived(AckReceivedEvent event, Emitter<SosState> emit) {
+    if (state.status != SosStatus.active) return;
+    emit(state.copyWith(
+      ackCount: state.ackCount + 1,
+      maxHops: event.hopCount > state.maxHops ? event.hopCount : state.maxHops,
+    ));
   }
 
   void _startTimer() {
@@ -101,9 +127,32 @@ class SosBloc extends Bloc<SosEvent, SosState> {
     _tickTimer = null;
   }
 
+  void _startCommSubscription() {
+    _cancelCommSubscription();
+    _commSubscription = _comm.incomingMessages.listen((msg) {
+      if (msg.type == MessageType.ack &&
+          msg.payload.startsWith(AckConstants.ACK_PREFIX)) {
+        final parts = msg.payload.split(AckConstants.ACK_SEPARATOR);
+        if (parts.length == AckConstants.ACK_PAYLOAD_PARTS) {
+          final msgId = parts[AckConstants.ACK_MSG_ID_INDEX];
+          final hops = int.tryParse(parts[AckConstants.ACK_HOP_INDEX]) ?? 0;
+          if (msgId == state.currentSosMessageId) {
+            add(AckReceivedEvent(hops));
+          }
+        }
+      }
+    });
+  }
+
+  void _cancelCommSubscription() {
+    _commSubscription?.cancel();
+    _commSubscription = null;
+  }
+
   @override
   Future<void> close() {
     _cancelTimer();
+    _cancelCommSubscription();
     return super.close();
   }
 }

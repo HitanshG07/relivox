@@ -5,6 +5,7 @@ import 'package:logger/logger.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 import 'package:geolocator/geolocator.dart';
+import '../constants/ack_constants.dart';
 import '../models/peer.dart';
 import '../models/message.dart';
 import '../protocols/gossip_manager.dart';
@@ -12,7 +13,6 @@ import 'database_service.dart';
 import 'identity_service.dart';
 import 'notification_service.dart';
 import 'encryption_service.dart';
-
 
 final _log = Logger(printer: PrettyPrinter(methodCount: 0));
 
@@ -70,8 +70,8 @@ class AdvertisementEmergencyEvent extends P2PEvent {
   final String displayName;
   final String deviceId;
   final String emergencyType; // FIRE | MEDC | TRAP | GEN
-  final String latitude;      // decimal string e.g. "19.0709"
-  final String longitude;     // decimal string e.g. "72.8796"
+  final String latitude; // decimal string e.g. "19.0709"
+  final String longitude; // decimal string e.g. "72.8796"
   AdvertisementEmergencyEvent({
     required this.displayName,
     required this.deviceId,
@@ -81,7 +81,6 @@ class AdvertisementEmergencyEvent extends P2PEvent {
   });
 }
 
-
 /// The central Dart service that talks to NearbyPlugin.kt via MethodChannel.
 class CommunicationService {
   final IdentityService _identity;
@@ -89,12 +88,13 @@ class CommunicationService {
   late final GossipManager _gossip;
   final _enc = EncryptionService();
 
-
   static CommunicationService? _instance;
-  factory CommunicationService([IdentityService? identity, DatabaseService? db]) {
+  factory CommunicationService(
+      [IdentityService? identity, DatabaseService? db]) {
     if (_instance == null) {
       if (identity == null || db == null) {
-        throw Exception("CommunicationService must be initialized with services first");
+        throw Exception(
+            "CommunicationService must be initialized with services first");
       }
       _instance = CommunicationService._internal(identity, db);
     }
@@ -103,7 +103,6 @@ class CommunicationService {
 
   CommunicationService._internal(this._identity, this._db) {
     _kChannel.setMethodCallHandler(_onNativeCall);
-
 
     _gossip = GossipManager(
       myDeviceId: _identity.deviceId,
@@ -118,7 +117,6 @@ class CommunicationService {
         });
       },
     );
-
   }
 
   // All P2P events (peer lifecycle + messages) in a single stream
@@ -129,7 +127,10 @@ class CommunicationService {
   Stream<List<Peer>> get deviceStream async* {
     yield getCurrentPeers();
     await for (final ev in events) {
-      if (ev is PeerDiscoveredEvent || ev is PeerLostEvent || ev is PeerConnectedEvent || ev is PeerDisconnectedEvent) {
+      if (ev is PeerDiscoveredEvent ||
+          ev is PeerLostEvent ||
+          ev is PeerConnectedEvent ||
+          ev is PeerDisconnectedEvent) {
         yield getCurrentPeers();
       }
     }
@@ -140,6 +141,8 @@ class CommunicationService {
       if (ev is MessageReceivedEvent) yield ev.message;
     }
   }
+
+  Stream<Message> get incomingMessages => messageStream;
 
   Stream<bool> get connectionStateStream async* {
     await for (final ev in events) {
@@ -172,8 +175,11 @@ class CommunicationService {
   final Map<String, String> _endpointToName = {};
   final Map<String, DateTime> _endpointLastSeen = {};
   final Map<String, String> _endpointToDeviceId = {}; // New map
-  Timer? _cleanupTimer;
+  final Set<String> _ackedIds = {};
+  String? _lastSentMessageId;
+  String? get lastSentMessageId => _lastSentMessageId;
 
+  Timer? _cleanupTimer;
 
   // ── Advertising & Discovery ───────────────────────────────────────────────
 
@@ -182,7 +188,8 @@ class CommunicationService {
     if (!await _requestPermissions()) return;
     try {
       final combinedName = "${_identity.displayName}|${_identity.deviceId}";
-      await _kChannel.invokeMethod('startAdvertising', {'userName': combinedName});
+      await _kChannel
+          .invokeMethod('startAdvertising', {'userName': combinedName});
       _isAdvertising = true;
       _log.i('Advertising started as "$combinedName"');
     } catch (e) {
@@ -215,7 +222,6 @@ class CommunicationService {
     // by onDisconnected events fired by Nearby after stopAll().
     // Clearing it here would cause the isEmpty guard to misbehave.
   }
-
 
   Future<void> startAll() async {
     if (_isRunning) return;
@@ -264,38 +270,47 @@ class CommunicationService {
   Future<void> restartAdvertising(String newName) async {
     await _kChannel.invokeMethod('stopAdvertising');
     final combinedName = "$newName|${_identity.deviceId}";
-    await _kChannel.invokeMethod('startAdvertising', {'userName': combinedName});
+    await _kChannel
+        .invokeMethod('startAdvertising', {'userName': combinedName});
     _log.i('Advertising restarted with name: $combinedName');
   }
 
   List<Peer> getCurrentPeers() {
     final seenDeviceIds = <String>{};
-    return _deviceEndpoints.keys.map((name) {
-      final isConnected = _connectedDevices.contains(name);
-      final isConnecting = _connectingDevices.contains(name);
-      final eid = _exposedIdForName[name] ?? '';
-      final devId = _endpointToDeviceId[eid];
-      return Peer(
-        endpointId: eid,
-        displayName: name,
-        deviceId: devId,
-        status: isConnected
-            ? PeerStatus.connected
-            : (isConnecting ? PeerStatus.connecting : PeerStatus.discovered),
-        lastSeen: DateTime.now().toUtc().toIso8601String(),
-      );
-    }).where((p) => seenDeviceIds.add(p.deviceId ?? p.displayName)).toList();
+    return _deviceEndpoints.keys
+        .map((name) {
+          final isConnected = _connectedDevices.contains(name);
+          final isConnecting = _connectingDevices.contains(name);
+          final eid = _exposedIdForName[name] ?? '';
+          final devId = _endpointToDeviceId[eid];
+          return Peer(
+            endpointId: eid,
+            displayName: name,
+            deviceId: devId,
+            status: isConnected
+                ? PeerStatus.connected
+                : (isConnecting
+                    ? PeerStatus.connecting
+                    : PeerStatus.discovered),
+            lastSeen: DateTime.now().toUtc().toIso8601String(),
+          );
+        })
+        .where((p) => seenDeviceIds.add(p.deviceId ?? p.displayName))
+        .toList();
   }
 
   void startCleanupTimer() {
     _cleanupTimer?.cancel();
-    _cleanupTimer = Timer.periodic(const Duration(seconds: 5), (_) => cleanupStaleEndpoints());
+    _cleanupTimer = Timer.periodic(
+        const Duration(seconds: 5), (_) => cleanupStaleEndpoints());
 
     _seenCleanupTimer?.cancel();
     _seenCleanupTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       final now = DateTime.now();
-      _seenMessageTimestamps.removeWhere((id, time) => now.difference(time).inSeconds > 60);
-      _seenMessageIds.removeWhere((id) => !_seenMessageTimestamps.containsKey(id));
+      _seenMessageTimestamps
+          .removeWhere((id, time) => now.difference(time).inSeconds > 60);
+      _seenMessageIds
+          .removeWhere((id) => !_seenMessageTimestamps.containsKey(id));
     });
   }
 
@@ -308,7 +323,6 @@ class CommunicationService {
     final now = DateTime.now();
     final staleEndpoints = _endpointLastSeen.entries
         .where((entry) => now.difference(entry.value).inSeconds > 30)
-
         .map((entry) => entry.key)
         .toList();
     for (final eid in staleEndpoints) {
@@ -334,7 +348,8 @@ class CommunicationService {
         return;
       }
       // Has a fresh eid — previous attempt was stale, clear and retry
-      _log.i('[CONNECT] $name had stale connecting state — clearing and retrying');
+      _log.i(
+          '[CONNECT] $name had stale connecting state — clearing and retrying');
       _connectingDevices.remove(name);
     }
 
@@ -347,12 +362,12 @@ class CommunicationService {
     await _requestConnection(endpointId);
   }
 
- 
   Future<void> disconnectFromDevice(String name) async {
     final endpoints = _deviceEndpoints[name];
     if (endpoints == null) return;
     for (var eid in endpoints) {
-      await _kChannel.invokeMethod('disconnectFromEndpoint', {'endpointId': eid});
+      await _kChannel
+          .invokeMethod('disconnectFromEndpoint', {'endpointId': eid});
     }
     _connectedDevices.remove(name);
     _connectingDevices.remove(name);
@@ -388,23 +403,22 @@ class CommunicationService {
       timestamp: DateTime.now().toUtc().toIso8601String(),
       hops: 0,
       seq: 0,
-      priority: type.isEmergency ? MessagePriority.high : MessagePriority.normal,
+      priority:
+          type.isEmergency ? MessagePriority.high : MessagePriority.normal,
     );
-    _log.i('💡 [TX-TRACE] Sending user message ${message.id} to ${receiverId.isEmpty ? 'BROADCAST' : receiverId}');
+    _lastSentMessageId = message.id;
+    _log.i(
+        '💡 [TX-TRACE] Sending user message ${message.id} to ${receiverId.isEmpty ? 'BROADCAST' : receiverId}');
     await _db.upsertMessage(message);
     _eventController.add(MessageReceivedEvent(message, 'local'));
     await _gossip.send(message);
 
     // If this is a broadcast emergency, also embed the marker in
     // the advertisement so non-connected nearby peers can receive it.
-    if (type == MessageType.emergency &&
-        receiverId == Message.broadcastId) {
+    if (type == MessageType.emergency && receiverId == Message.broadcastId) {
       _activateEmergencyMarker(message.id, type: emergencyType);
     }
   }
-
-
-
 
   // ── Native → Dart callbacks ───────────────────────────────────────────────
 
@@ -420,8 +434,8 @@ class CommunicationService {
         // Detect format:
         //   Emergency: "DisplayName|EMG:TYPE:Lat,Lng"
         //   Normal:    "DisplayName|deviceId"
-        final emgPart = parts.firstWhere(
-            (p) => p.startsWith('EMG:'), orElse: () => '');
+        final emgPart =
+            parts.firstWhere((p) => p.startsWith('EMG:'), orElse: () => '');
 
         String? incomingDeviceId;
         String? emgType;
@@ -447,7 +461,8 @@ class CommunicationService {
         }
 
         // Persist username ↔ deviceId (normal mode only)
-        if (incomingDeviceId != null && displayName.isNotEmpty &&
+        if (incomingDeviceId != null &&
+            displayName.isNotEmpty &&
             !displayName.startsWith('Device-')) {
           _db.upsertKnownPeer(incomingDeviceId, displayName);
         }
@@ -458,7 +473,7 @@ class CommunicationService {
             emgLat != null &&
             emgLng != null) {
           _log.i('[EMG-ADV] Geo-emergency from $displayName: '
-                 '$emgType @ $emgLat,$emgLng');
+              '$emgType @ $emgLat,$emgLng');
           _eventController.add(AdvertisementEmergencyEvent(
             displayName: displayName,
             deviceId: eid, // UUID dropped during emergency — use eid
@@ -475,9 +490,9 @@ class CommunicationService {
         // Normal flow: clear stale state for this deviceId
         if (incomingDeviceId != null) {
           final staleEndpoint = _endpointToDeviceId.entries
-            .where((e) => e.value == incomingDeviceId)
-            .map((e) => e.key)
-            .firstOrNull;
+              .where((e) => e.value == incomingDeviceId)
+              .map((e) => e.key)
+              .firstOrNull;
           if (staleEndpoint != null && staleEndpoint != eid) {
             final oldName = _endpointToName[staleEndpoint];
             if (oldName != null) {
@@ -492,14 +507,16 @@ class CommunicationService {
         // Clear stale old-name if deviceId re-advertised with new name
         if (incomingDeviceId != null) {
           final oldName = _endpointToName.entries
-            .where((e) =>
-              _endpointToDeviceId[e.key] == incomingDeviceId &&
-              e.value != displayName)
-            .map((e) => e.value)
-            .firstOrNull;
+              .where((e) =>
+                  _endpointToDeviceId[e.key] == incomingDeviceId &&
+                  e.value != displayName)
+              .map((e) => e.value)
+              .firstOrNull;
           if (oldName != null) {
-            if (_connectedDevices.remove(oldName)) _connectedDevices.add(displayName);
-            if (_connectingDevices.remove(oldName)) _connectingDevices.add(displayName);
+            if (_connectedDevices.remove(oldName))
+              _connectedDevices.add(displayName);
+            if (_connectingDevices.remove(oldName))
+              _connectingDevices.add(displayName);
             _deviceEndpoints.remove(oldName);
             _exposedIdForName.remove(oldName);
           }
@@ -519,9 +536,10 @@ class CommunicationService {
         // ALWAYS update exposedIdForName so connectToDevice()
         // always has the freshest endpointId after a Nearby restart
         _exposedIdForName[displayName] = eid;
-        
-        _log.i('Device discovered: $displayName ($eid) | ID: $incomingDeviceId.');
-        
+
+        _log.i(
+            'Device discovered: $displayName ($eid) | ID: $incomingDeviceId.');
+
         final peer = Peer(
           endpointId: eid,
           displayName: displayName,
@@ -534,8 +552,10 @@ class CommunicationService {
       case 'onConnectionInitiated':
         final eid = args['endpointId'] as String;
         final name = args['endpointName'] as String? ?? eid;
-        _log.i('Connection initiated with $name ($eid). Accepting (Bug 1 Step 2)...');
-        _eventController.add(ConnectionInitiatedEvent(eid, name, args['token'] as String? ?? ''));
+        _log.i(
+            'Connection initiated with $name ($eid). Accepting (Bug 1 Step 2)...');
+        _eventController.add(ConnectionInitiatedEvent(
+            eid, name, args['token'] as String? ?? ''));
         await _acceptConnection(eid);
         break;
 
@@ -573,7 +593,7 @@ class CommunicationService {
           // Retrying with a stale eid causes permanent deadlock.
           // The user or the 5s discovery refresh will trigger a fresh connect.
           _log.w('[CONN-FAIL] Connection to $eid (name: $name) failed '
-                 'with code $code — no auto-retry');
+              'with code $code — no auto-retry');
         }
         break;
 
@@ -600,7 +620,8 @@ class CommunicationService {
           _log.i('Disconnected from $eid — no peers left. Restarting.');
           _restartDiscoveryAndAdvertising();
         } else {
-          _log.i('Disconnected from $eid — ${_connectedEndpoints.length} peers still active, skip restart.');
+          _log.i(
+              'Disconnected from $eid — ${_connectedEndpoints.length} peers still active, skip restart.');
         }
         break;
 
@@ -650,8 +671,9 @@ class CommunicationService {
     late Message incoming;
     try {
       incoming = Message.fromWireJson(payloadStr);
-    } catch (e) { return; }
-
+    } catch (e) {
+      return;
+    }
 
     if (_seenMessageIds.contains(incoming.id)) return;
     _seenMessageIds.add(incoming.id);
@@ -672,10 +694,8 @@ class CommunicationService {
     );
 
     final myId = _identity.deviceId;
-    final isBroadcast =
-        processedMessage.receiverId == Message.broadcastId;
-    final isFinalReceiver =
-        processedMessage.receiverId == myId || isBroadcast;
+    final isBroadcast = processedMessage.receiverId == Message.broadcastId;
+    final isFinalReceiver = processedMessage.receiverId == myId || isBroadcast;
 
     if (!isFinalReceiver && processedMessage.ttl <= 0) return;
 
@@ -686,23 +706,48 @@ class CommunicationService {
       // _endpointToName maps endpointId → displayName.
       // Falls back gracefully inside show() if null.
       final senderName = _endpointToName[eid];
-      await NotificationService().show(processedMessage, senderName: senderName);
+      await NotificationService()
+          .show(processedMessage, senderName: senderName);
 
       if (processedMessage.type != MessageType.ack) {
-        _log.i('💡 [ACK-TRACE] Generating auto-ACK for message ${processedMessage.id} to ${processedMessage.senderId}');
-        final ack = Message(
-          id: const Uuid().v4(),
-          type: MessageType.ack,
-          senderId: _identity.deviceId,
-          receiverId: processedMessage.senderId,
-          timestamp: DateTime.now().toUtc().toIso8601String(),
-          ttl: 3,
-          hops: 0,
-          seq: 0,
-          priority: MessagePriority.normal,
-          payload: processedMessage.id,
-        );
-        await _gossip.send(ack);
+        if (processedMessage.type == MessageType.emergency &&
+            processedMessage.senderId != _identity.deviceId) {
+          if (!_ackedIds.contains(processedMessage.id)) {
+            _ackedIds.add(processedMessage.id);
+            final ack = Message(
+              id: const Uuid().v4(),
+              type: MessageType.ack,
+              senderId: _identity.deviceId,
+              receiverId: processedMessage.senderId,
+              timestamp: DateTime.now().toUtc().toIso8601String(),
+              ttl: AckConstants.ACK_TTL,
+              hops: 0,
+              seq: 0,
+              priority: MessagePriority.high,
+              payload: '${AckConstants.ACK_PREFIX}${processedMessage.id}'
+                  '${AckConstants.ACK_SEPARATOR}${processedMessage.hops}',
+            );
+            await _db.upsertMessage(ack);
+            await _gossip.send(ack);
+            _log.i('💡 [ACK] Sent ACK for SOS ${processedMessage.id}');
+          }
+        } else {
+          _log.i(
+              '💡 [ACK-TRACE] Generating auto-ACK for message ${processedMessage.id} to ${processedMessage.senderId}');
+          final ack = Message(
+            id: const Uuid().v4(),
+            type: MessageType.ack,
+            senderId: _identity.deviceId,
+            receiverId: processedMessage.senderId,
+            timestamp: DateTime.now().toUtc().toIso8601String(),
+            ttl: 3,
+            hops: 0,
+            seq: 0,
+            priority: MessagePriority.normal,
+            payload: processedMessage.id,
+          );
+          await _gossip.send(ack);
+        }
       }
       return;
     }
@@ -710,7 +755,8 @@ class CommunicationService {
     if (processedMessage.ttl <= 0) return;
     // Relay silently — relay nodes must NOT show notifications
     // for messages addressed to other devices
-    debugPrint('MESH RELAY: ${processedMessage.id} | Recipients: ${_connectedEndpoints.length} peers connected');
+    debugPrint(
+        'MESH RELAY: ${processedMessage.id} | Recipients: ${_connectedEndpoints.length} peers connected');
     await _gossip.relay(processedMessage, eid);
   }
 
@@ -721,17 +767,20 @@ class CommunicationService {
     // to avoid the edge case where Nearby firmware does.
     if (_connectedEndpoints.isNotEmpty) {
       _log.i('[RESTART] Skipped — ${_connectedEndpoints.length} '
-             'active connections still live');
+          'active connections still live');
       return;
     }
-    try { await stopDiscovery(); } catch (_) {}
-    try { await stopAdvertising(); } catch (_) {}
+    try {
+      await stopDiscovery();
+    } catch (_) {}
+    try {
+      await stopAdvertising();
+    } catch (_) {}
     await Future.delayed(const Duration(milliseconds: 200));
     await startDiscovery();
 
     await startAdvertising();
   }
-
 
   Future<void> forceRefresh() async {
     // Clear all in-progress connection attempts before restarting.
@@ -740,7 +789,6 @@ class CommunicationService {
     _connectingDevices.clear();
     await _restartDiscoveryAndAdvertising();
   }
-
 
   /// Restarts advertising with an |EMG:xxxx suffix embedded in the
   /// endpointName so nearby non-connected devices can detect the alert.
@@ -777,7 +825,8 @@ class CommunicationService {
 
     try {
       await _kChannel.invokeMethod('stopAdvertising');
-      await _kChannel.invokeMethod('startAdvertising', {'userName': combinedName});
+      await _kChannel
+          .invokeMethod('startAdvertising', {'userName': combinedName});
       _log.i('[EMG-ADV] Geo-emergency marker activated: $combinedName');
     } catch (e) {
       _log.e('[EMG-ADV] Failed to start geo-emergency advertising: $e');
@@ -790,7 +839,8 @@ class CommunicationService {
       final normalName = '${_identity.displayName}|${_identity.deviceId}';
       try {
         await _kChannel.invokeMethod('stopAdvertising');
-        await _kChannel.invokeMethod('startAdvertising', {'userName': normalName});
+        await _kChannel
+            .invokeMethod('startAdvertising', {'userName': normalName});
         _log.i('[EMG-ADV] Geo-emergency marker cleared, back to normal');
       } catch (e) {
         _log.e('[EMG-ADV] Failed to clear geo-emergency marker: $e');

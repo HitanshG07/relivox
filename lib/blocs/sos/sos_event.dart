@@ -35,3 +35,12 @@ class SosTickEvent extends SosEvent {
 class SosBroadcastEvent extends SosEvent {
   const SosBroadcastEvent();
 }
+
+/// Internal event: An ACK was received for the active SOS broadcast.
+/// hopCount = number of hops the ACK travelled.
+class AckReceivedEvent extends SosEvent {
+  final int hopCount;
+  const AckReceivedEvent(this.hopCount);
+  @override
+  List<Object?> get props => [hopCount];
+}

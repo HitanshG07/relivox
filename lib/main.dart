@@ -76,6 +76,7 @@ class RelivoxApp extends StatelessWidget {
           BlocProvider<SosBloc>(
             create: (context) => SosBloc(
               mic: context.read<MicBloc>(),
+              comm: context.read<CommunicationService>(),
             ),
           ),
           BlocProvider<ChatsBloc>(

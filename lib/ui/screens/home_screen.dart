@@ -874,6 +874,22 @@ class _SosTrigger extends StatelessWidget {
                 'Next broadcast in ${state.secondsRemaining}s',
                 style: const TextStyle(color: Colors.white60, fontSize: 12),
               ),
+              const SizedBox(height: 8),
+              if (state.ackCount > 0)
+                Text(
+                  '✅ ${state.ackCount} device(s) received '
+                  '— max ${state.maxHops} hop(s)',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF34C759), // green
+                  ),
+                )
+              else
+                const Text(
+                  'Waiting for confirmation...',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
