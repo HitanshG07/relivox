@@ -5,6 +5,8 @@ import '../../services/sos_service.dart';
 import 'sos_event.dart';
 import 'sos_state.dart';
 
+import '../mic/mic_bloc.dart';
+
 /// Manages the SOS panic button state machine.
 ///
 /// State transitions:
@@ -15,10 +17,12 @@ import 'sos_state.dart';
 ///   PAUSED   → [SosCancelEvent]    → INACTIVE
 class SosBloc extends Bloc<SosEvent, SosState> {
   final SosService _sos;
+  final MicBloc _mic;
   Timer? _tickTimer;
 
-  SosBloc({SosService? sosService})
+  SosBloc({SosService? sosService, required MicBloc mic})
       : _sos = sosService ?? SosService(),
+        _mic = mic,
         super(const SosState()) {
     on<SosActivateEvent>(_onActivate);
     on<SosCancelEvent>(_onCancel);
@@ -67,10 +71,12 @@ class SosBloc extends Bloc<SosEvent, SosState> {
     }
   }
 
-  Future<void> _onBroadcast(
-      SosBroadcastEvent e, Emitter<SosState> emit) async {
+  Future<void> _onBroadcast(SosBroadcastEvent e, Emitter<SosState> emit) async {
     final newCount = state.broadcastCount + 1;
-    await _sos.fireBroadcast(broadcastNumber: newCount);
+    await _sos.fireBroadcast(
+      broadcastNumber: newCount,
+      medicalInfo: _mic.state.info.isEmpty ? null : _mic.state.info,
+    );
     if (newCount >= SosConstants.maxBroadcasts) {
       _cancelTimer();
       emit(state.copyWith(

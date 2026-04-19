@@ -14,6 +14,7 @@ import '../../blocs/sos/sos_bloc.dart';
 import '../../blocs/sos/sos_event.dart';
 import '../../blocs/sos/sos_state.dart';
 import '../../constants/sos_constants.dart';
+import 'mic_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,129 +27,133 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider<SosBloc>(
-      create: (_) => SosBloc(),
-      child: Scaffold(
-        backgroundColor: const Color(0xFF0D0D1A),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF13132B),
-          title: Text(
-            _currentIndex == 0 ? 'Chats' : 'Relivox Mesh',
-            style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          actions: [
-            BlocBuilder<DiscoveryBloc, DiscoveryState>(
-              builder: (context, state) {
-                final hasAlerts = state.broadcastEmergencyLog.isNotEmpty;
-                return Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        Icons.notifications_active,
-                        color: hasAlerts ? Colors.redAccent : Colors.white38,
-                      ),
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => BroadcastLogScreen(
-                            log: state.broadcastEmergencyLog,
-                          ),
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D0D1A),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF13132B),
+        title: Text(
+          _currentIndex == 0 ? 'Chats' : 'Relivox Mesh',
+          style:
+              const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          BlocBuilder<DiscoveryBloc, DiscoveryState>(
+            builder: (context, state) {
+              final hasAlerts = state.broadcastEmergencyLog.isNotEmpty;
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      Icons.notifications_active,
+                      color: hasAlerts ? Colors.redAccent : Colors.white38,
+                    ),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => BroadcastLogScreen(
+                          log: state.broadcastEmergencyLog,
                         ),
                       ),
                     ),
-                    if (hasAlerts)
-                      Positioned(
-                        right: 8,
-                        top: 8,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Colors.redAccent,
-                            shape: BoxShape.circle,
-                          ),
+                  ),
+                  if (hasAlerts)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: Colors.redAccent,
+                          shape: BoxShape.circle,
                         ),
                       ),
-                  ],
+                    ),
+                ],
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.white70),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            ),
+          ),
+          if (_currentIndex == 1)
+            BlocBuilder<DiscoveryBloc, DiscoveryState>(
+              builder: (context, state) {
+                return IconButton(
+                  icon: state.isRefreshing
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white54,
+                          ),
+                        )
+                      : const Icon(Icons.refresh, color: Colors.white70),
+                  onPressed: state.isRefreshing
+                      ? null
+                      : () => context
+                          .read<DiscoveryBloc>()
+                          .add(ManualRefreshEvent()),
                 );
               },
             ),
-            IconButton(
-              icon: const Icon(Icons.settings, color: Colors.white70),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              ),
-            ),
-            if (_currentIndex == 1)
-              BlocBuilder<DiscoveryBloc, DiscoveryState>(
-                builder: (context, state) {
-                  return IconButton(
-                    icon: state.isRefreshing
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white54,
-                            ),
-                          )
-                        : const Icon(Icons.refresh, color: Colors.white70),
-                    onPressed: state.isRefreshing
-                        ? null
-                        : () => context
-                            .read<DiscoveryBloc>()
-                            .add(ManualRefreshEvent()),
-                  );
-                },
-              ),
-          ],
-        ),
-        body: Column(
-          children: [
-            const _EmergencyBanner(),
-            if (_currentIndex == 1) const _DiscoveryHeader(),
-            Expanded(
-              child: _currentIndex == 0
-                  ? const ChatsScreen()
-                  : BlocBuilder<DiscoveryBloc, DiscoveryState>(
-                      builder: (context, state) {
-                        if (state.peers.isEmpty) {
-                          return const _EmptyDiscovery();
-                        }
-                        return ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: state.peers.length,
-                          itemBuilder: (context, i) =>
-                              _PeerTile(peer: state.peers[i]),
-                        );
-                      },
-                    ),
-            ),
-            if (_currentIndex == 1) const _SosTrigger(),
-          ],
-        ),
-        bottomNavigationBar: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (index) => setState(() => _currentIndex = index),
-          backgroundColor: const Color(0xFF13132B),
-          selectedItemColor: const Color(0xFF6C63FF),
-          unselectedItemColor: Colors.white38,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.chat_bubble_outline),
-              activeIcon: Icon(Icons.chat_bubble),
-              label: 'Chats',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.radar),
-              activeIcon: Icon(Icons.radar),
-              label: 'Devices',
-            ),
-          ],
-        ),
+        ],
+      ),
+      body: Column(
+        children: [
+          const _EmergencyBanner(),
+          if (_currentIndex == 1) const _DiscoveryHeader(),
+          Expanded(
+            child: _currentIndex == 0
+                ? const ChatsScreen()
+                : (_currentIndex == 1
+                    ? BlocBuilder<DiscoveryBloc, DiscoveryState>(
+                        builder: (context, state) {
+                          if (state.peers.isEmpty) {
+                            return const _EmptyDiscovery();
+                          }
+                          return ListView.builder(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: state.peers.length,
+                            itemBuilder: (context, i) =>
+                                _PeerTile(peer: state.peers[i]),
+                          );
+                        },
+                      )
+                    : const MicScreen()),
+          ),
+          if (_currentIndex == 1) const _SosTrigger(),
+        ],
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
+        backgroundColor: const Color(0xFF13132B),
+        selectedItemColor: const Color(0xFF6C63FF),
+        unselectedItemColor: Colors.white38,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.chat_bubble_outline),
+            activeIcon: Icon(Icons.chat_bubble),
+            label: 'Chats',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.radar),
+            activeIcon: Icon(Icons.radar),
+            label: 'Devices',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.medical_information_outlined),
+            activeIcon: Icon(Icons.medical_information),
+            label: 'Medical',
+          ),
+        ],
       ),
     );
   }

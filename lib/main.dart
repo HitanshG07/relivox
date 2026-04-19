@@ -10,6 +10,9 @@ import 'blocs/discovery/discovery_bloc.dart';
 import 'blocs/settings/settings_bloc.dart';
 import 'ui/screens/splash_screen.dart';
 import 'blocs/chats/chats_bloc.dart';
+import 'blocs/mic/mic_bloc.dart';
+import 'blocs/mic/mic_event.dart';
+import 'blocs/sos/sos_bloc.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,7 +29,8 @@ void main() async {
   await identityService.init();
 
   final databaseService = DatabaseService();
-  final communicationService = CommunicationService(identityService, databaseService);
+  final communicationService =
+      CommunicationService(identityService, databaseService);
 
   runApp(
     RelivoxApp(
@@ -63,7 +67,16 @@ class RelivoxApp extends StatelessWidget {
             create: (_) => DiscoveryBloc(communicationService),
           ),
           BlocProvider(
-            create: (_) => SettingsBloc(SettingsService())..add(SettingsLoaded()),
+            create: (_) =>
+                SettingsBloc(SettingsService())..add(SettingsLoaded()),
+          ),
+          BlocProvider<MicBloc>(
+            create: (_) => MicBloc()..add(const LoadMicEvent()),
+          ),
+          BlocProvider<SosBloc>(
+            create: (context) => SosBloc(
+              mic: context.read<MicBloc>(),
+            ),
           ),
           BlocProvider<ChatsBloc>(
             create: (context) => ChatsBloc(
