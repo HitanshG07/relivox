@@ -15,6 +15,7 @@ import '../../blocs/sos/sos_event.dart';
 import '../../blocs/sos/sos_state.dart';
 import '../../constants/sos_constants.dart';
 import 'mic_screen.dart';
+import 'package:geolocator/geolocator.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -379,17 +380,46 @@ class _BroadcastTrigger extends StatelessWidget {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: () {
+            onPressed: () async {
               final text = controller.text.trim().isNotEmpty
                   ? controller.text.trim()
-                  : typeLabel; // fallback if user types nothing
+                  : typeLabel;
+              Navigator.pop(ctx);
+
+              String lat = 'Unknown';
+              String lng = 'Unknown';
+              String? geoUri;
+
+              try {
+                final permission = await Geolocator.checkPermission();
+                if (permission == LocationPermission.denied) {
+                  await Geolocator.requestPermission();
+                }
+                final pos = await Geolocator.getCurrentPosition(
+                  locationSettings: const LocationSettings(
+                    accuracy: LocationAccuracy.high,
+                    timeLimit: Duration(seconds: 8),
+                  ),
+                );
+                lat = pos.latitude.toStringAsFixed(5);
+                lng = pos.longitude.toStringAsFixed(5);
+                geoUri = 'geo:$lat,$lng?q=$lat,$lng(SOS+Emergency)';
+              } catch (_) {
+                // GPS unavailable — send without location
+              }
+
+              String payload = '$text\nLocation: $lat, $lng';
+              if (geoUri != null) {
+                payload += '\nTap to open offline map:\n$geoUri';
+              }
+
+              // ignore: use_build_context_synchronously
               context.read<CommunicationService>().sendUserMessage(
-                    text,
+                    payload,
                     Message.broadcastId,
                     MessageType.emergency,
-                    emergencyType: typeCode, // ← passes FIRE/MEDC/TRAP/GEN
+                    emergencyType: typeCode,
                   );
-              Navigator.pop(ctx);
             },
             child: const Text('SEND TO ALL',
                 style: TextStyle(color: Colors.white)),
