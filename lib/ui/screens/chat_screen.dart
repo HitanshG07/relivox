@@ -7,6 +7,7 @@ import '../../models/peer.dart';
 import '../../services/identity_service.dart';
 import '../../services/communication_service.dart';
 import '../../services/database_service.dart';
+import '../../constants/hop_tick_constants.dart';
 
 class ChatScreen extends StatefulWidget {
   final Peer targetPeer;
@@ -26,7 +27,8 @@ class _ChatScreenState extends State<ChatScreen> {
       create: (context) => ChatBloc(
         context.read<CommunicationService>(),
         context.read<DatabaseService>(),
-        peerDeviceId: widget.targetPeer.deviceId ?? widget.targetPeer.endpointId,
+        peerDeviceId:
+            widget.targetPeer.deviceId ?? widget.targetPeer.endpointId,
       )..add(LoadAllMessages()),
       child: Builder(builder: (context) {
         return Scaffold(
@@ -35,7 +37,7 @@ class _ChatScreenState extends State<ChatScreen> {
             backgroundColor: const Color(0xFF13132B),
             title: Text(
               (widget.targetPeer.displayName.isNotEmpty &&
-               !widget.targetPeer.displayName.startsWith('Device-'))
+                      !widget.targetPeer.displayName.startsWith('Device-'))
                   ? widget.targetPeer.displayName
                   : 'Unknown User',
               style: const TextStyle(color: Colors.white),
@@ -44,7 +46,8 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           body: Column(
             children: [
-              Expanded(child: _MessageList(scrollController: _scrollController)),
+              Expanded(
+                  child: _MessageList(scrollController: _scrollController)),
               _InputBar(
                 controller: _controller,
                 onSend: () => _send(context),
@@ -140,7 +143,9 @@ class _MessageBubble extends StatelessWidget {
               radius: 14,
               backgroundColor: const Color(0xFF6C63FF).withValues(alpha: 0.3),
               child: Text(
-                message.senderId.substring(message.senderId.length - 2).toUpperCase(),
+                message.senderId
+                    .substring(message.senderId.length - 2)
+                    .toUpperCase(),
                 style: const TextStyle(fontSize: 10, color: Colors.white70),
               ),
             ),
@@ -186,7 +191,8 @@ class _MessageBubble extends StatelessWidget {
                       ),
                     ),
                   Text(message.payload,
-                      style: const TextStyle(color: Colors.white, fontSize: 14)),
+                      style:
+                          const TextStyle(color: Colors.white, fontSize: 14)),
                   const SizedBox(height: 4),
                   Row(
                     mainAxisSize: MainAxisSize.min,
@@ -194,16 +200,13 @@ class _MessageBubble extends StatelessWidget {
                       Text(time,
                           style: const TextStyle(
                               color: Colors.white38, fontSize: 10)),
-                      const SizedBox(width: 6),
-                      Text('·${message.hops}hop·TTL${message.ttl}',
-                          style: const TextStyle(
-                              color: Colors.white24, fontSize: 9)),
                       if (isMe) ...[
                         const SizedBox(width: 4),
                         _DeliveryIcon(status: message.deliveryStatus),
                       ],
                     ],
                   ),
+                  _HopTickBadge(hops: message.hops, isOwn: isMe),
                 ],
               ),
             ),
@@ -230,6 +233,46 @@ class _DeliveryIcon extends StatelessWidget {
       case DeliveryStatus.failed:
         return const Icon(Icons.error_outline, size: 12, color: Colors.red);
     }
+  }
+}
+
+/// Displays a small hop-count label below a received message.
+/// Returns [SizedBox.shrink()] for own messages (isOwn == true).
+class _HopTickBadge extends StatelessWidget {
+  final int hops;
+  final bool isOwn;
+
+  const _HopTickBadge({required this.hops, required this.isOwn});
+
+  @override
+  Widget build(BuildContext context) {
+    if (isOwn) return const SizedBox.shrink();
+
+    final String label;
+    final Color color;
+
+    if (hops == 0) {
+      label = HopTickConstants.directLabel;
+      color = HopTickConstants.directColor;
+    } else if (hops == 1) {
+      label = HopTickConstants.oneHopLabel;
+      color = HopTickConstants.oneHopColor;
+    } else {
+      label = HopTickConstants.nHopLabel(hops);
+      color = HopTickConstants.multiHopColor;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: HopTickConstants.badgeFontSize,
+          color: color,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
   }
 }
 
@@ -268,7 +311,8 @@ class _InputBar extends StatelessWidget {
             const Divider(color: Colors.white10),
             ListTile(
               leading: const Icon(Icons.person, color: Colors.white70),
-              title: const Text('👤 PERSONAL', style: TextStyle(color: Colors.white)),
+              title: const Text('👤 PERSONAL',
+                  style: TextStyle(color: Colors.white)),
               subtitle: Text('Send to ${targetPeer.displayName} only',
                   style: const TextStyle(color: Colors.white38, fontSize: 12)),
               onTap: () async {
@@ -276,7 +320,8 @@ class _InputBar extends StatelessWidget {
                 final text = controller.text.trim();
                 if (text.isNotEmpty) {
                   // Use deviceId so ChatBloc filter matches correctly
-                  final resolvedId = targetPeer.deviceId ?? targetPeer.endpointId;
+                  final resolvedId =
+                      targetPeer.deviceId ?? targetPeer.endpointId;
                   await CommunicationService()
                       .sendUserMessage(text, resolvedId, MessageType.emergency);
                   if (context.mounted) {
@@ -316,8 +361,8 @@ class _InputBar extends StatelessWidget {
                   hintStyle: const TextStyle(color: Colors.white38),
                   filled: true,
                   fillColor: const Color(0xFF1E1E3A),
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 10),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
                     borderSide: BorderSide.none,
