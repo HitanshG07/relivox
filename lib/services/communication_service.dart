@@ -142,7 +142,7 @@ class CommunicationService {
       if (ev is MessageReceivedEvent) yield ev.message;
     }
   }
-  
+
   int get connectedCount => _gossip.connectedCount;
 
   Stream<Message> get incomingMessages => messageStream;
@@ -695,7 +695,14 @@ class CommunicationService {
     }
 
     if (incoming.type == MessageType.ack) {
-      final ackedId = incoming.payload;
+      // BUG-11 FIX: Parse unified ACK format ACK:{msgId}:{hops} introduced
+      // by BUG-4 fix. Extract plain UUID before passing to DB, gossip, and
+      // event bus — otherwise all delivery tick updates silently fail.
+      final rawPayload = incoming.payload;
+      final ackedId = rawPayload.startsWith(AckConstants.ACK_PREFIX)
+          ? rawPayload
+              .split(AckConstants.ACK_SEPARATOR)[AckConstants.ACK_MSG_ID_INDEX]
+          : rawPayload;
       _log.i('💡 [ACK-TRACE] Caught ACK for message $ackedId from $eid');
       await _db.updateDeliveryStatus(ackedId, DeliveryStatus.acked);
       _gossip.recordAck(ackedId, eid);
@@ -762,8 +769,7 @@ class CommunicationService {
             hops: 0,
             seq: 0,
             priority: MessagePriority.normal,
-            payload:
-                '${AckConstants.ACK_PREFIX}${processedMessage.id}'
+            payload: '${AckConstants.ACK_PREFIX}${processedMessage.id}'
                 '${AckConstants.ACK_SEPARATOR}${processedMessage.hops}',
           );
           await _gossip.send(ack);
