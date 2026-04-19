@@ -62,10 +62,14 @@ class SosBloc extends Bloc<SosEvent, SosState> {
 
   Future<void> _onExtend(SosExtendEvent e, Emitter<SosState> emit) async {
     _cancelTimer();
+    // FIX-9: Do NOT reset broadcastCount. Extend grants 5 more broadcasts
+    // from the current count, preventing unlimited extend abuse.
+    final newMax = (state.extendedMaxBroadcasts ?? SosConstants.maxBroadcasts)
+        + SosConstants.maxBroadcasts;
     emit(state.copyWith(
       status: SosStatus.active,
-      broadcastCount: 0,
       secondsRemaining: SosConstants.broadcastIntervalSeconds,
+      extendedMaxBroadcasts: newMax,
     ));
     _startCommSubscription();
     add(const SosBroadcastEvent());
@@ -76,9 +80,15 @@ class SosBloc extends Bloc<SosEvent, SosState> {
     if (state.status != SosStatus.active) return;
     final next = state.secondsRemaining - 1;
     if (next <= 0) {
-      emit(state.copyWith(
-          secondsRemaining: SosConstants.broadcastIntervalSeconds));
-      add(const SosBroadcastEvent());
+      final effectiveMax =
+          state.extendedMaxBroadcasts ?? SosConstants.maxBroadcasts;
+      if (state.broadcastCount < effectiveMax) {
+        emit(state.copyWith(
+            secondsRemaining: SosConstants.broadcastIntervalSeconds));
+        add(const SosBroadcastEvent());
+      } else {
+        add(const SosBroadcastEvent()); // triggers paused emit
+      }
     } else {
       emit(state.copyWith(secondsRemaining: next));
     }
@@ -86,12 +96,14 @@ class SosBloc extends Bloc<SosEvent, SosState> {
 
   Future<void> _onBroadcast(SosBroadcastEvent e, Emitter<SosState> emit) async {
     final newCount = state.broadcastCount + 1;
-    await _sos.fireBroadcast(
+    // FIX-1/3: fireBroadcast now returns the message ID directly,
+    // eliminating the race condition from reading _comm.lastSentMessageId.
+    final msgId = await _sos.fireBroadcast(
       broadcastNumber: newCount,
       medicalInfo: _mic.state.info.isEmpty ? null : _mic.state.info,
     );
-    final msgId = _comm.lastSentMessageId;
-    if (newCount >= SosConstants.maxBroadcasts) {
+    final effectiveMax = state.extendedMaxBroadcasts ?? SosConstants.maxBroadcasts;
+    if (newCount >= effectiveMax) {
       _cancelTimer();
       emit(state.copyWith(
         status: SosStatus.paused,
@@ -108,7 +120,9 @@ class SosBloc extends Bloc<SosEvent, SosState> {
   }
 
   void _onAckReceived(AckReceivedEvent event, Emitter<SosState> emit) {
-    if (state.status != SosStatus.active) return;
+    // FIX-7: Accept ACKs in both active AND paused states.
+    // Late ACKs for the 5th broadcast arrive after status = paused.
+    if (state.status == SosStatus.inactive) return;
     emit(state.copyWith(
       ackCount: state.ackCount + 1,
       maxHops: event.hopCount > state.maxHops ? event.hopCount : state.maxHops,

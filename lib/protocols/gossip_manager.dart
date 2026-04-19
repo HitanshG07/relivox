@@ -54,7 +54,9 @@ class GossipManager {
   }) : _transmit = transmit {
     _retryTimer = Timer.periodic(
       const Duration(seconds: 30),
-      (_) => _retryPendingMessages(),
+      // FIX-2: unawaited() explicitly marks this as intentional fire-and-forget.
+      // The Future return type now ensures exceptions are catchable internally.
+      (_) => unawaited(_retryPendingMessages()),
     );
     _init(); // Restores queue from DB (fire-and-forget async)
   }
@@ -290,7 +292,7 @@ class GossipManager {
   }
 
   /// Retries sending all pending messages to all connected endpoints.
-  void _retryPendingMessages() async {
+  Future<void> _retryPendingMessages() async {
     if (_connectedEndpoints.isEmpty) return;
     if (_pendingQueue.isEmpty) return;
 

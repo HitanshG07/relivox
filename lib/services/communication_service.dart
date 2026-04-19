@@ -142,6 +142,8 @@ class CommunicationService {
       if (ev is MessageReceivedEvent) yield ev.message;
     }
   }
+  
+  int get connectedCount => _gossip.connectedCount;
 
   Stream<Message> get incomingMessages => messageStream;
 
@@ -392,6 +394,8 @@ class CommunicationService {
     String receiverId,
     MessageType type, {
     String emergencyType = 'GEN',
+    int? overrideTtl,
+    MessagePriority? overridePriority,
   }) async {
     if (content.isEmpty) return;
     final message = Message(
@@ -399,13 +403,13 @@ class CommunicationService {
       senderId: _identity.deviceId,
       receiverId: receiverId,
       payload: content,
-      ttl: GossipManager.adaptiveTtl(_gossip.connectedCount),
+      ttl: overrideTtl ?? GossipManager.adaptiveTtl(_gossip.connectedCount),
       type: type,
       timestamp: DateTime.now().toUtc().toIso8601String(),
       hops: 0,
       seq: 0,
-      priority:
-          type.isEmergency ? MessagePriority.high : MessagePriority.normal,
+      priority: overridePriority ??
+          (type.isEmergency ? MessagePriority.high : MessagePriority.normal),
     );
     _lastSentMessageId = message.id;
     _log.i(
@@ -745,17 +749,22 @@ class CommunicationService {
         } else {
           _log.i(
               '💡 [ACK-TRACE] Generating auto-ACK for message ${processedMessage.id} to ${processedMessage.senderId}');
+          // FIX-4: Unified ACK format: ACK:{msgId}:{hops} — same as SOS ACKs.
+          // Prevents cross-contamination where non-SOS ACK payload
+          // accidentally matches currentSosMessageId in SosBloc.
           final ack = Message(
             id: const Uuid().v4(),
             type: MessageType.ack,
             senderId: _identity.deviceId,
             receiverId: processedMessage.senderId,
             timestamp: DateTime.now().toUtc().toIso8601String(),
-            ttl: 3,
+            ttl: AckConstants.ACK_TTL,
             hops: 0,
             seq: 0,
             priority: MessagePriority.normal,
-            payload: processedMessage.id,
+            payload:
+                '${AckConstants.ACK_PREFIX}${processedMessage.id}'
+                '${AckConstants.ACK_SEPARATOR}${processedMessage.hops}',
           );
           await _gossip.send(ack);
         }

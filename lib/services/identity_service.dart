@@ -45,7 +45,8 @@ class IdentityService {
 
   Future<void> init() async {
     // Load or create device ID
-    _deviceId = await _storage.read(key: _kDeviceId) ?? _generateAndSaveId();
+    _deviceId =
+        await _storage.read(key: _kDeviceId) ?? await _generateAndSaveId();
     _displayName =
         await _storage.read(key: _kDisplayName) ?? await _createDisplayName();
 
@@ -89,9 +90,11 @@ class IdentityService {
 
 
 
-  String _generateAndSaveId() {
+  /// FIX-10: Made async so storage write is awaited before returning.
+  /// Prevents identity loss if app is killed before write completes.
+  Future<String> _generateAndSaveId() async {
     final id = const Uuid().v4();
-    _storage.write(key: _kDeviceId, value: id);
+    await _storage.write(key: _kDeviceId, value: id);
     return id;
   }
 

@@ -93,7 +93,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final b64 = await VoiceService().stopRecordingAsBase64();
     setState(() => _isRecording = false);
     if (b64 != null && context.mounted) {
-      context.read<ChatBloc>().add(SendTextMessage('voice:$b64'));
+      // FIX-5: Use SendMediaMessage for elevated TTL on voice
+      context.read<ChatBloc>().add(SendMediaMessage('voice:$b64'));
     }
   }
 
@@ -394,7 +395,8 @@ class _InputBar extends StatelessWidget {
               onPressed: () async {
                 final b64 = await ImageService().pickAndEncodeImage();
                 if (b64 != null && context.mounted) {
-                  context.read<ChatBloc>().add(SendTextMessage('image:$b64'));
+                  // FIX-6: Use SendMediaMessage for elevated TTL on images
+                  context.read<ChatBloc>().add(SendMediaMessage('image:$b64'));
                 }
               },
             ),

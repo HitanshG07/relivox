@@ -16,9 +16,11 @@ class SosState extends Equatable {
   /// Zero when inactive or paused.
   final int secondsRemaining;
 
-  final int ackCount; // default: 0
-  final int maxHops; // default: 0
-  final String? currentSosMessageId; // null when inactive
+  final int ackCount;
+  final int maxHops;
+  final String? currentSosMessageId;
+  /// FIX-9: Extended max broadcast count (null = use SosConstants.maxBroadcasts)
+  final int? extendedMaxBroadcasts;
 
   const SosState({
     this.status = SosStatus.inactive,
@@ -27,6 +29,7 @@ class SosState extends Equatable {
     this.ackCount = 0,
     this.maxHops = 0,
     this.currentSosMessageId,
+    this.extendedMaxBroadcasts,
   });
 
   /// Returns a new [SosState] with provided fields overridden.
@@ -37,6 +40,7 @@ class SosState extends Equatable {
     int? ackCount,
     int? maxHops,
     String? currentSosMessageId,
+    int? extendedMaxBroadcasts,
   }) =>
       SosState(
         status: status ?? this.status,
@@ -45,6 +49,7 @@ class SosState extends Equatable {
         ackCount: ackCount ?? this.ackCount,
         maxHops: maxHops ?? this.maxHops,
         currentSosMessageId: currentSosMessageId ?? this.currentSosMessageId,
+        extendedMaxBroadcasts: extendedMaxBroadcasts ?? this.extendedMaxBroadcasts,
       );
 
   @override
@@ -55,5 +60,6 @@ class SosState extends Equatable {
         ackCount,
         maxHops,
         currentSosMessageId,
+        extendedMaxBroadcasts,
       ];
 }

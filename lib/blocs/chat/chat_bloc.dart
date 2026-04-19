@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 import '../../models/message.dart';
 import '../../services/communication_service.dart';
 import '../../services/database_service.dart';
+import '../../protocols/gossip_manager.dart';
 
 // ── Events ───────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,16 @@ class SendEmergencyBroadcast extends ChatEvent {
   SendEmergencyBroadcast(this.text);
   @override
   List<Object?> get props => [text];
+}
+
+/// FIX-5,6: Media messages (voice:... / image:...) need elevated TTL
+/// to survive sparse mesh conditions. Regular text gets adaptive TTL
+/// which can be as low as 3. Media needs at minimum 6.
+class SendMediaMessage extends ChatEvent {
+  final String payload; // prefixed: "voice:..." or "image:..."
+  SendMediaMessage(this.payload);
+  @override
+  List<Object?> get props => [payload];
 }
 
 class _IncomingMessage extends ChatEvent {
@@ -70,6 +81,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
   ChatBloc(this._comm, this._db, {required this.peerDeviceId}) : super(const ChatState()) {
     on<LoadAllMessages>(_onLoad);
     on<SendTextMessage>(_onSendText);
+    on<SendMediaMessage>(_onSendMedia);
     on<SendEmergencyBroadcast>(_onEmergency);
     on<_IncomingMessage>(_onIncoming);
     on<_MessageAcked>(_onAcked);
@@ -109,6 +121,25 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
 
   Future<void> _onSendText(SendTextMessage e, Emitter<ChatState> emit) async {
     await _comm.sendUserMessage(e.text, peerDeviceId, MessageType.text);
+    add(LoadAllMessages());
+  }
+
+  /// FIX-5,6: Sends voice or image messages with elevated TTL (min 6)
+  /// and high priority to ensure delivery across sparse meshes.
+  Future<void> _onSendMedia(
+      SendMediaMessage e, Emitter<ChatState> emit) async {
+    final baseTtl = GossipManager.adaptiveTtl(_comm.connectedCount);
+    // Guarantee minimum TTL of 6 for media — regardless of mesh density.
+    final mediaTtl = baseTtl < 6 ? 6 : baseTtl;
+
+    await _comm.sendUserMessage(
+      e.payload,
+      peerDeviceId,
+      MessageType.text,
+      overrideTtl: mediaTtl,
+      overridePriority: MessagePriority.high,
+    );
+
     add(LoadAllMessages());
   }
 

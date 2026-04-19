@@ -20,11 +20,8 @@ class SosService {
   factory SosService() => _instance;
   SosService._internal();
 
-  /// Fires one emergency broadcast with GPS payload if available.
-  ///
-  /// Returns true on successful send, false only if the send itself
-  /// throws. GPS failure alone does NOT return false.
-  Future<bool> fireBroadcast({
+  /// Returns the sent message ID on success, null on failure.
+  Future<String?> fireBroadcast({
     required int broadcastNumber,
     MedicalInfo? medicalInfo,
   }) async {
@@ -76,17 +73,18 @@ class SosService {
         payload += '\nTap to open offline map:\n$geoUri';
       }
 
-      CommunicationService().sendUserMessage(
+      await CommunicationService().sendUserMessage(
         payload,
         Message.broadcastId,
         MessageType.emergency,
         emergencyType: 'GEN',
       );
-      _log.i('[SosService] Broadcast #$broadcastNumber sent');
-      return true;
+      final sentId = CommunicationService().lastSentMessageId;
+      _log.i('[SosService] Broadcast #$broadcastNumber sent: $sentId');
+      return sentId;
     } catch (e) {
       _log.e('[SosService] Broadcast failed: $e');
-      return false;
+      return null;
     }
   }
 }

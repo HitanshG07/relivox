@@ -128,7 +128,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       )
                     : const MicScreen()),
           ),
-          if (_currentIndex == 1) const _SosTrigger(),
+          // FIX-8: SOS button visible on ALL tabs — not just Devices tab.
+          // In an emergency the user must be able to trigger SOS from
+          // any screen, including Chats (default tab).
+          const _SosTrigger(),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
