@@ -4,6 +4,9 @@ import 'package:flutter/foundation.dart';
 import '../models/message.dart';
 import '../services/database_service.dart';
 import '../services/settings_service.dart';
+import '../constants/mesh_constants.dart';
+
+enum MeshMode { STAR, CLUSTER }
 
 enum DeviceState { READY, LIMITED, FULL }
 
@@ -18,7 +21,7 @@ class _PendingMessage {
 class GossipManager {
   static const int _maxSeenCacheSize = 2000;
   static const int MAX_QUEUE_SIZE = 50;
-  static const int MAX_RETRIES    = 3;
+  static const int MAX_RETRIES = 3;
 
   final String myDeviceId;
   final Future<void> Function(String endpointId, String payload) _transmit;
@@ -36,9 +39,11 @@ class GossipManager {
   // ACK tracking: message ID → Set of endpointIds that have acked
   final Map<String, Set<String>> _acks = {};
 
-  // Tracks which endpoints have received each broadcast emergency
   // Key: messageId  Value: Set of endpointIds that received it
   final Map<String, Set<String>> _broadcastEmergencyDelivered = {};
+
+  /// Tracks when each endpoint first connected (for smart relay).
+  final Map<String, DateTime> _connectionTimes = {};
 
   Timer? _retryTimer;
 
@@ -59,7 +64,8 @@ class GossipManager {
       for (final msg in restored) {
         _pendingQueue.add(_PendingMessage(msg));
       }
-      debugPrint('[GossipManager] Restored ${_pendingQueue.length} pending messages from DB');
+      debugPrint(
+          '[GossipManager] Restored ${_pendingQueue.length} pending messages from DB');
     } catch (e) {
       debugPrint('[GossipManager] Failed to restore pending queue: $e');
     }
@@ -92,6 +98,7 @@ class GossipManager {
   /// Registered a newly connected device and flushes queue immediately.
   void onEndpointConnected(String endpointId) {
     _connectedEndpoints.add(endpointId);
+    _connectionTimes[endpointId] = DateTime.now(); // NEW
     // Use a two-stage flush:
     //   Stage 1 @ 3s  — covers fast devices (most modern Android)
     //   Stage 2 @ 8s  — safety net for slow devices or congested radio
@@ -104,7 +111,8 @@ class GossipManager {
   void _scheduledFlush(String endpointId, Duration delay) {
     Future.delayed(delay, () async {
       if (!_connectedEndpoints.contains(endpointId)) {
-        debugPrint('[GossipManager] Flush cancelled — $endpointId disconnected');
+        debugPrint(
+            '[GossipManager] Flush cancelled — $endpointId disconnected');
         return;
       }
       debugPrint('[GossipManager] Flush @ ${delay.inSeconds}s for $endpointId');
@@ -113,10 +121,27 @@ class GossipManager {
     });
   }
 
-
   /// Removes a disconnected device from management.
   void onEndpointDisconnected(String endpointId) {
     _connectedEndpoints.remove(endpointId);
+    _connectionTimes.remove(endpointId); // NEW — clean up
+  }
+
+  /// Current mesh advertising mode.
+  MeshMode get meshMode =>
+      _connectedEndpoints.length >= MeshConstants.clusterThreshold
+          ? MeshMode.CLUSTER
+          : MeshMode.STAR;
+
+  /// Number of currently connected endpoints.
+  int get connectedCount => _connectedEndpoints.length;
+
+  /// Returns the appropriate TTL for the current mesh density.
+  static int adaptiveTtl(int peerCount) {
+    if (peerCount < MeshConstants.sparseLimit) return MeshConstants.ttlSparse;
+    if (peerCount < MeshConstants.denseLimit) return MeshConstants.ttlNormal;
+    if (peerCount < MeshConstants.maxDenseLimit) return MeshConstants.ttlDense;
+    return MeshConstants.ttlMaxDense;
   }
 
   /// Initiates relay for a locally created message.
@@ -159,16 +184,29 @@ class GossipManager {
     // 4b. Broadcast emergency: ALWAYS store for late-joining peers,
     // regardless of whether endpoints are connected right now.
     final isBroadcastEmergency =
-        message.type.isEmergency &&
-        message.receiverId == Message.broadcastId;
+        message.type.isEmergency && message.receiverId == Message.broadcastId;
     if (isBroadcastEmergency) {
       _storeForLater(message);
     }
 
     // 5. Transmission
+    final now = DateTime.now();
     for (final endpoint in _connectedEndpoints) {
       if (endpoint == fromEndpoint) continue;
-      
+
+      // Phase 6: Skip brand-new peers for NORMAL messages only
+      if (message.priority == MessagePriority.normal) {
+        final connectedAt = _connectionTimes[endpoint];
+        if (connectedAt != null) {
+          final ageMs = now.difference(connectedAt).inMilliseconds;
+          if (ageMs < MeshConstants.newPeerGracePeriodMs) {
+            debugPrint('[SmartRelay] Skipping new peer $endpoint '
+                '(age ${ageMs}ms < grace period)');
+            continue;
+          }
+        }
+      }
+
       try {
         await _transmit(endpoint, message.toWireJson());
       } catch (e) {
@@ -181,7 +219,7 @@ class GossipManager {
   /// Persistent store-and-forward with priority-based eviction.
   void _storeForLater(Message message) {
     if (message.ttl <= 0) return; // Drop expired
-    
+
     // Deduplicate in queue
     if (_pendingQueue.any((m) => m.message.id == message.id)) return;
 
@@ -194,32 +232,36 @@ class GossipManager {
     // Queue full — Eviction policy
     if (message.type.isEmergency) {
       // Find oldest NORMAL message
-      int oldestNormalIdx = _pendingQueue.indexWhere((m) => m.message.type.isNormal);
+      int oldestNormalIdx =
+          _pendingQueue.indexWhere((m) => m.message.type.isNormal);
       if (oldestNormalIdx != -1) {
         final removed = _pendingQueue.removeAt(oldestNormalIdx);
         DatabaseService().removePendingMessage(removed.message.id);
-        
+
         // Add EMERGENCY to FRONT
         _pendingQueue.insert(0, _PendingMessage(message));
         DatabaseService().savePendingMessage(message);
       } else {
-        debugPrint('[GossipManager] Queue full, cannot store emergency — no NORMAL to evict');
+        debugPrint(
+            '[GossipManager] Queue full, cannot store emergency — no NORMAL to evict');
       }
       return;
     }
 
     if (message.type.isNormal) {
       // Find oldest NORMAL message
-      int oldestNormalIdx = _pendingQueue.indexWhere((m) => m.message.type.isNormal);
+      int oldestNormalIdx =
+          _pendingQueue.indexWhere((m) => m.message.type.isNormal);
       if (oldestNormalIdx != -1) {
         final removed = _pendingQueue.removeAt(oldestNormalIdx);
         DatabaseService().removePendingMessage(removed.message.id);
-        
+
         // Add new NORMAL to BACK
         _pendingQueue.add(_PendingMessage(message));
         DatabaseService().savePendingMessage(message);
       } else {
-        debugPrint('[GossipManager] Queue full with EMERGENCY messages, rejecting NORMAL');
+        debugPrint(
+            '[GossipManager] Queue full with EMERGENCY messages, rejecting NORMAL');
       }
       return;
     }
@@ -239,7 +281,8 @@ class GossipManager {
     for (final pending in snapshot) {
       if (pending.retryCount >= GossipManager.MAX_RETRIES) {
         toRemove.add(pending);
-        debugPrint('[FLUSH-TRACE] ${pending.message.id} → ⛔ MAX_RETRIES exceeded, dropping');
+        debugPrint(
+            '[FLUSH-TRACE] ${pending.message.id} → ⛔ MAX_RETRIES exceeded, dropping');
         continue;
       }
 
@@ -248,10 +291,12 @@ class GossipManager {
       for (final endpoint in endpointList) {
         try {
           await _transmit(endpoint, pending.message.toWireJson());
-          debugPrint('[FLUSH-TRACE] ${pending.message.id} → ✅ sent to $endpoint');
+          debugPrint(
+              '[FLUSH-TRACE] ${pending.message.id} → ✅ sent to $endpoint');
         } catch (e) {
           sentToAll = false;
-          debugPrint('[FLUSH-TRACE] ${pending.message.id} → ❌ failed for $endpoint: $e');
+          debugPrint(
+              '[FLUSH-TRACE] ${pending.message.id} → ❌ failed for $endpoint: $e');
         }
       }
 
@@ -261,32 +306,33 @@ class GossipManager {
         // Partial failure — increment retry, keep in queue
         pending.retryCount++;
         debugPrint('[FLUSH-TRACE] ${pending.message.id} → partial failure '
-                   '[retry ${pending.retryCount}/${GossipManager.MAX_RETRIES}]');
+            '[retry ${pending.retryCount}/${GossipManager.MAX_RETRIES}]');
       }
     }
 
     for (final sent in toRemove) {
       _pendingQueue.remove(sent);
       DatabaseService().removePendingMessage(sent.message.id);
-      debugPrint('[FLUSH-TRACE] ${sent.message.id} → 🗑 removed after full delivery');
+      debugPrint(
+          '[FLUSH-TRACE] ${sent.message.id} → 🗑 removed after full delivery');
     }
   }
-
 
   /// Re-sends all stored broadcast emergency messages that have NOT been
   /// acknowledged yet to a single newly connected [endpointId].
   /// Called only from onEndpointConnected — normal text messages are
   /// NOT affected.
   Future<void> _flushBroadcastEmergenciesToEndpoint(String endpointId) async {
-    final emergencies = _pendingQueue.where((pm) =>
-      pm.message.type.isEmergency &&
-      pm.message.receiverId == Message.broadcastId
-    ).toList();
+    final emergencies = _pendingQueue
+        .where((pm) =>
+            pm.message.type.isEmergency &&
+            pm.message.receiverId == Message.broadcastId)
+        .toList();
 
     if (emergencies.isEmpty) return;
 
     debugPrint('[EMERGENCY-FLUSH] Sending ${emergencies.length} broadcast '
-               'emergencies to new peer $endpointId');
+        'emergencies to new peer $endpointId');
 
     final List<_PendingMessage> toRemove = [];
 
@@ -308,10 +354,11 @@ class GossipManager {
         if (allDelivered) {
           toRemove.add(pm);
           debugPrint('[EMERGENCY-FLUSH] 🗑 ${pm.message.id} delivered to all '
-                     '${_connectedEndpoints.length} peers — pruning from queue');
+              '${_connectedEndpoints.length} peers — pruning from queue');
         }
       } catch (e) {
-        debugPrint('[EMERGENCY-FLUSH] ❌ ${pm.message.id} → $endpointId failed: $e');
+        debugPrint(
+            '[EMERGENCY-FLUSH] ❌ ${pm.message.id} → $endpointId failed: $e');
       }
     }
 
@@ -333,8 +380,8 @@ class GossipManager {
 
   void flush() {
     debugPrint('[FLUSH-TRACE] Manual flush triggered. '
-      'Queue: ${_pendingQueue.length} msgs, '
-      'Endpoints: ${_connectedEndpoints.length}');
+        'Queue: ${_pendingQueue.length} msgs, '
+        'Endpoints: ${_connectedEndpoints.length}');
     _retryPendingMessages();
   }
 
@@ -346,6 +393,7 @@ class GossipManager {
     _seenIds.clear();
     _pendingQueue.clear();
     _acks.clear();
+    _connectionTimes.clear(); // NEW
   }
 
   void dispose() {

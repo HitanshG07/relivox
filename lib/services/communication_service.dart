@@ -9,6 +9,7 @@ import '../constants/ack_constants.dart';
 import '../models/peer.dart';
 import '../models/message.dart';
 import '../protocols/gossip_manager.dart';
+import '../constants/mesh_constants.dart';
 import 'database_service.dart';
 import 'identity_service.dart';
 import 'notification_service.dart';
@@ -398,7 +399,7 @@ class CommunicationService {
       senderId: _identity.deviceId,
       receiverId: receiverId,
       payload: content,
-      ttl: type.isEmergency ? 8 : 5,
+      ttl: GossipManager.adaptiveTtl(_gossip.connectedCount),
       type: type,
       timestamp: DateTime.now().toUtc().toIso8601String(),
       hops: 0,
@@ -568,6 +569,8 @@ class CommunicationService {
           if (name != null) _connectedDevices.add(name);
           _connectedEndpoints.add(eid);
           _gossip.onEndpointConnected(eid);
+          _log.i('[Mesh] Mode: ${_gossip.meshMode.name} '
+              '(${_gossip.connectedCount}/${MeshConstants.clusterThreshold} peers)');
           // Flush is now handled by the 3s delayed call inside
           // onEndpointConnected — removing instant flush here
           // to prevent it from racing the radio init window
