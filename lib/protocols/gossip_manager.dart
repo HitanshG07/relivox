@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../models/message.dart';
 import '../services/database_service.dart';
@@ -189,6 +190,12 @@ class GossipManager {
       _storeForLater(message);
     }
 
+    // Phase 7: Drop expired messages (emergency bypasses)
+    if (message.ttl <= 0 && !message.type.isEmergency) {
+      debugPrint('[TTL-DROP] ${message.id} (ttl=${message.ttl})');
+      return;
+    }
+
     // 5. Transmission
     final now = DateTime.now();
     for (final endpoint in _connectedEndpoints) {
@@ -208,7 +215,22 @@ class GossipManager {
       }
 
       try {
-        await _transmit(endpoint, message.toWireJson());
+        // Phase 7: Decrement TTL + increment hops for relay hops
+        final toSend = (fromEndpoint == 'local')
+            ? message
+            : message.copyWith(
+                ttl: message.ttl - 1,
+                hops: message.hops + 1,
+              );
+        await _transmit(endpoint, toSend.toWireJson());
+
+        // Phase 7: Remove from pending queue if present
+        final pendingIdx =
+            _pendingQueue.indexWhere((pm) => pm.message.id == message.id);
+        if (pendingIdx != -1) {
+          _pendingQueue.removeAt(pendingIdx);
+          DatabaseService().removePendingMessage(message.id);
+        }
       } catch (e) {
         debugPrint('[GossipManager] Transmit failed to $endpoint: $e');
         // Will be retry-eligible later via _pendingQueue if connectivity exists
@@ -398,5 +420,50 @@ class GossipManager {
 
   void dispose() {
     _retryTimer?.cancel();
+  }
+
+  /// Sends this device's full known peer list to [endpointId].
+  /// Called once at connection time (Phase 8).
+  Future<void> sendPeerManifest(String endpointId) async {
+    try {
+      final peers = await DatabaseService().getAllKnownPeers();
+      if (peers.isEmpty) return;
+      final payload = json.encode(peers);
+      final manifest = Message.create(
+        senderId: myDeviceId,
+        receiverId: endpointId,
+        payload: payload,
+        type: MessageType.control,
+        priority: MessagePriority.normal,
+        ttl: 1,
+      );
+      await _transmit(endpointId, manifest.toWireJson());
+      debugPrint('[PeerManifest] Sent ${peers.length} peers '
+          'to $endpointId');
+    } catch (e) {
+      debugPrint('[PeerManifest] Send failed: $e');
+    }
+  }
+
+  /// Merges an incoming peer manifest into the local DB.
+  /// Called when a control message with a JSON-array payload
+  /// is received (Phase 8).
+  Future<void> receivePeerManifest(String payload) async {
+    try {
+      final List<dynamic> list = json.decode(payload) as List;
+      int merged = 0;
+      for (final entry in list) {
+        final map = entry as Map<String, dynamic>;
+        final deviceId = map['device_id'] as String?;
+        final displayName = map['display_name'] as String?;
+        if (deviceId != null && displayName != null) {
+          await DatabaseService().upsertKnownPeer(deviceId, displayName);
+          merged++;
+        }
+      }
+      debugPrint('[PeerManifest] Merged $merged peers from manifest');
+    } catch (e) {
+      debugPrint('[PeerManifest] Receive failed: $e');
+    }
   }
 }

@@ -569,6 +569,7 @@ class CommunicationService {
           if (name != null) _connectedDevices.add(name);
           _connectedEndpoints.add(eid);
           _gossip.onEndpointConnected(eid);
+          _gossip.sendPeerManifest(eid); // Phase 8: fire-and-forget
           _log.i('[Mesh] Mode: ${_gossip.meshMode.name} '
               '(${_gossip.connectedCount}/${MeshConstants.clusterThreshold} peers)');
           // Flush is now handled by the 3s delayed call inside
@@ -681,6 +682,13 @@ class CommunicationService {
     if (_seenMessageIds.contains(incoming.id)) return;
     _seenMessageIds.add(incoming.id);
     _seenMessageTimestamps[incoming.id] = DateTime.now();
+
+    // Phase 8: Intercept peer manifest control messages
+    if (incoming.type == MessageType.control &&
+        incoming.payload.startsWith('[')) {
+      await _gossip.receivePeerManifest(incoming.payload);
+      return;
+    }
 
     if (incoming.type == MessageType.ack) {
       final ackedId = incoming.payload;

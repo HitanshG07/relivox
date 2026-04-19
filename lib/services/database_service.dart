@@ -84,8 +84,10 @@ class DatabaseService {
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     _log.i('Upgrading DB from $oldVersion to $newVersion');
     if (oldVersion < 2) {
-      await db.execute("ALTER TABLE messages ADD COLUMN receiver_id TEXT NOT NULL DEFAULT ''");
-      await db.execute("ALTER TABLE pending_outbound ADD COLUMN receiver_id TEXT NOT NULL DEFAULT ''");
+      await db.execute(
+          "ALTER TABLE messages ADD COLUMN receiver_id TEXT NOT NULL DEFAULT ''");
+      await db.execute(
+          "ALTER TABLE pending_outbound ADD COLUMN receiver_id TEXT NOT NULL DEFAULT ''");
       _log.i('Added receiver_id column to tables');
     }
 
@@ -190,8 +192,6 @@ class DatabaseService {
     return rows.map((r) => Message.fromMap(r)).toList();
   }
 
-
-
   /// Saves or updates a peer's human display name keyed by their deviceId.
   /// Called every time a peer is discovered so the name stays current.
   Future<void> upsertKnownPeer(String deviceId, String displayName) async {
@@ -220,5 +220,11 @@ class DatabaseService {
     );
     if (rows.isEmpty) return null;
     return rows.first['display_name'] as String?;
+  }
+
+  /// Returns all known peers as raw maps for PeerManifest.
+  Future<List<Map<String, dynamic>>> getAllKnownPeers() async {
+    final d = await db;
+    return d.query('known_peers');
   }
 }
