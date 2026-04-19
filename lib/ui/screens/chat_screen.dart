@@ -8,8 +8,10 @@ import '../../services/identity_service.dart';
 import '../../services/communication_service.dart';
 import '../../services/database_service.dart';
 import '../../services/voice_service.dart';
+import '../../services/image_service.dart';
 import '../../constants/hop_tick_constants.dart';
 import '../widgets/voice_message_bubble.dart';
+import '../widgets/image_message_bubble.dart';
 
 class ChatScreen extends StatefulWidget {
   final Peer targetPeer;
@@ -209,7 +211,12 @@ class _MessageBubble extends StatelessWidget {
                         ],
                       ),
                     ),
-                  if (message.payload.startsWith('voice:'))
+                  if (message.payload.startsWith('image:'))
+                    ImageMessageBubble(
+                      base64Image: message.payload.substring(6),
+                      isOwn: isMe,
+                    )
+                  else if (message.payload.startsWith('voice:'))
                     VoiceMessageBubble(
                       base64Audio: message.payload.substring(6),
                       isOwn: isMe,
@@ -381,6 +388,15 @@ class _InputBar extends StatelessWidget {
             IconButton(
               icon: const Icon(Icons.emergency_share, color: Colors.redAccent),
               onPressed: () => _showEmergencyOptions(context),
+            ),
+            IconButton(
+              icon: const Icon(Icons.camera_alt, color: Colors.white54),
+              onPressed: () async {
+                final b64 = await ImageService().pickAndEncodeImage();
+                if (b64 != null && context.mounted) {
+                  context.read<ChatBloc>().add(SendTextMessage('image:$b64'));
+                }
+              },
             ),
             Expanded(
               child: TextField(

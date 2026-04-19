@@ -1,70 +1,81 @@
-# Relivox
+# Relivox 🌐
 
-**Offline Peer-to-Peer Communication System for Zero-Network Environments**
+> Offline peer-to-peer mesh communication for
+> zero-network environments.
 
-Relivox is a decentralized, server-less mobile application designed for communication in scenarios where internet or cellular networks are unavailable (e.g., disasters, remote areas, network outages). It uses Google's Nearby Connections API to establish high-throughput P2P links and implement a multi-hop gossip protocol for message relaying.
+Relivox enables real-time text, voice, and image messaging
+between Android devices using Bluetooth + Wi-Fi Direct
+(Google Nearby Connections API) — **no internet, no servers,
+no infrastructure required.**
 
 ## Features
-- **Offline Messaging**: Send and receive messages without internet using Bluetooth, Wi-Fi Direct, and BLE.
-- **Device Discovery**: See nearby users in real-time.
-- **Multi-hop Relay (Gossip Protocol)**: Messages are automatically forwarded between devices to extend range.
-- **Emergency Broadcast**: High-priority alert messages emphasized in the UI.
-- **Local Persistence**: All messages and peer data are stored locally in a SQLite database.
-- **E2EE Ready**: Built-in Ed25519 signing and X25519 key management framework.
 
-## Architecture
+| Sprint | Feature |
+|--------|---------|
+| S1 | SOS Panic Button — broadcasts emergency alert across mesh |
+| S1 | Medical Info Card — pre-filled emergency health data |
+| S2 | ACK confirmation chain — delivery receipts over mesh |
+| S2 | Hop-aware ticks — relay depth indicator per message |
+| S3 | Adaptive TTL — message lifetime based on hop count |
+| S3 | Smart relay — avoids redundant forwarding |
+| S3 | Mesh mode advertising — multi-strategy BLE + WiFi |
+| S4 | Store-and-forward — retry queue with exponential backoff |
+| S4 | Peer list propagation — indirect peer discovery |
+| S5 | Foreground service — mesh relay survives screen lock |
+| S5 | Push-to-talk voice — hold to record, release to send |
+| S6 | Offline image sharing — compressed gallery pickup |
 
-### Component Diagram
-```mermaid
-graph TD
-    UI[Flutter UI - BLoC] --> CM[CommunicationService]
-    UI --> DS[DatabaseService]
-    CM --> NP[NearbyPlugin Kotlin]
-    NP --> GNC[Google Nearby Connections API]
-    CM --> GM[GossipManager]
-    GM --> DS
-    UI --> ES[EncryptionService]
+## Directory Structure
+
+```text
+lib/
+├── blocs/          # BLoC state management
+│   ├── chat/       # Per-peer chat events/state
+│   ├── chats/      # Conversations list
+│   ├── discovery/  # Nearby peer discovery
+│   ├── mic/        # Medical Info Card (MIC)
+│   ├── settings/   # App settings
+│   └── sos/        # SOS alert flow
+├── models/         # Message, Peer, MedicalInfo
+├── protocols/      # GossipManager — mesh relay engine
+├── services/       # CommunicationService, DatabaseService,
+│                   # VoiceService, ImageService,
+│                   # ForegroundService, IdentityService
+└── ui/
+    ├── screens/    # ChatScreen, ChatsScreen, SplashScreen
+    └── widgets/    # VoiceMessageBubble, ImageMessageBubble
 ```
 
-### Sequence Diagram: Message Sending & Relay
-```mermaid
-sequenceDiagram
-    participant A as Device A
-    participant B as Device B
-    participant C as Device C
-    A->>A: Create Message (TTL=3)
-    A->>B: Send via Nearby Connections
-    B->>B: GossipManager: processIncoming()
-    B->>B: Save to SQLite
-    B->>C: Relay Message (TTL=2)
-    C->>C: GossipManager: processIncoming()
-    C->>C: UI: Display Message
+## Tech Stack
+
+- **Flutter 3.x** — cross-platform UI
+- **Google Nearby Connections** — Bluetooth + Wi-Fi Direct
+- **SQLite (sqflite)** — local message persistence
+- **flutter_bloc** — BLoC state management
+- **flutter_foreground_task** — background relay service
+- **record + just_audio** — voice recording and playback
+- **image_picker + flutter_image_compress** — image sharing
+- **cryptography** — message signing
+
+## Build & Run
+
+```bash
+# Prerequisites: Flutter 3.x, Android SDK
+flutter pub get
+flutter run                    # debug on connected device
+flutter build apk --debug      # build APK
 ```
 
-## Setup & Installation
+**Requires Android 6.0+ (API 23+)**
+Grant permissions on first launch:
+- Bluetooth, Location, Microphone, Notifications, Storage
 
-### Prerequisites
-- Flutter SDK (>= 3.3.0)
-- Android Studio / VS Code
-- Physical Android Devices (Nearby Connections requires physical hardware for Bluetooth/Wi-Fi Direct)
-- Android API Level 21+ (Target 33+)
+## Offline Protocol
 
-### Build Instructions
-1. Clone the repository into your Flutter workspace.
-2. Run `flutter pub get`.
-3. Connect your Android device.
-4. Run `flutter run`.
+Each message carries:
+- `ttl` — decremented at every relay hop (stops loops)
+- `hops` — incremented at every relay hop (visible to UI)
+- `seq` — per-sender sequence number (deduplication)
+- `signature` — sender identity verification
 
-### Permissions
-The app requires the following permissions, handled at runtime:
-- Bluetooth (Scan, Advertise, Connect)
-- Location (Fine/Coarse) - required by Android for P2P discovery
-- Nearby Wi-Fi Devices (API 33+)
-
-## CI/CD
-The project includes a GitHub Actions workflow `.github/workflows/android_ci.yml` for automated testing and APK building.
-
-## Troubleshooting
-- **Discovery Failure**: Ensure Bluetooth and Location are enabled on both devices.
-- **Connection Issues**: Nearby Connections may fail if devices are too far apart or have interfering 2.4GHz signals.
-- **Battery Optimization**: Some Android OEMs (Samsung, Huawei) may kill the app in the background. Disable battery optimization for Relivox for best results.
+Messages with `ttl=0` are dropped (except `emergency` type).
