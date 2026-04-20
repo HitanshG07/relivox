@@ -14,7 +14,8 @@ import '../../blocs/sos/sos_bloc.dart';
 import '../../blocs/sos/sos_event.dart';
 import '../../blocs/sos/sos_state.dart';
 import '../../constants/sos_constants.dart';
-import 'mic_screen.dart';
+import 'medical_screen.dart';
+import '../../services/medical_service.dart';
 import 'package:geolocator/geolocator.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -127,7 +128,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           );
                         },
                       )
-                    : const MicScreen()),
+                    : const MedicalScreen()),
           ),
           // FIX-8: SOS button visible on ALL tabs — not just Devices tab.
           // In an emergency the user must be able to trigger SOS from
@@ -153,8 +154,8 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Devices',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.medical_information_outlined),
-            activeIcon: Icon(Icons.medical_information),
+            icon: Icon(Icons.favorite_border),
+            activeIcon: Icon(Icons.favorite),
             label: 'Medical',
           ),
         ],
@@ -408,7 +409,11 @@ class _BroadcastTrigger extends StatelessWidget {
                 // GPS unavailable — send without location
               }
 
+              final medicalSummary = await MedicalService.getMedicalSummary();
               String payload = '$text\nLocation: $lat, $lng';
+              if (medicalSummary.isNotEmpty) {
+                payload += '\n$medicalSummary';
+              }
               if (geoUri != null) {
                 payload += '\nTap to open offline map:\n$geoUri';
               }

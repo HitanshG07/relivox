@@ -3,6 +3,7 @@ import 'package:logger/logger.dart';
 import '../constants/sos_constants.dart';
 import '../models/message.dart';
 import 'communication_service.dart';
+import 'medical_service.dart';
 
 import '../models/medical_info.dart';
 
@@ -71,6 +72,11 @@ class SosService {
 
       if (geoUri != null) {
         payload += '\nTap to open offline map:\n$geoUri';
+      }
+
+      final medicalSummary = await MedicalService.getMedicalSummary();
+      if (medicalSummary.isNotEmpty) {
+        payload += '\n$medicalSummary';
       }
 
       await CommunicationService().sendUserMessage(
