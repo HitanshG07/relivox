@@ -17,18 +17,19 @@ import 'blocs/sos/sos_bloc.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await SettingsService().init();
-  await NotificationService().init();
-  await ForegroundService().init();
-
-  // Lock to portrait for consistent P2P interaction UX
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-  ]);
-
-  // Initialise services
+  // Parallelise all independent startup inits — none depend on each other.
+  // Total wait = slowest single task instead of sum of all tasks.
   final identityService = IdentityService();
-  await identityService.init();
+
+  await Future.wait([
+    SettingsService().init(),
+    NotificationService().init(),
+    ForegroundService().init(),
+    identityService.init(),
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]),
+  ]);
 
   final databaseService = DatabaseService();
   final communicationService =
